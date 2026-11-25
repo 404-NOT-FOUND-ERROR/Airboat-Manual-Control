@@ -1,0 +1,84 @@
+.p1-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  background: #555e74;
+  border-bottom: 1px solid #ffffff3b;
+  font-size: 12px;
+}
+.p1-toolbar > div { display: flex; align-items: center; gap: 10px; }
+.p1-toolbar button { padding: 9px 0; color: #fff; }
+.p1-source { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.p1-source i { width: 7px; height: 7px; border-radius: 50%; background: #e1dfea; }
+.p1-is-live .p1-source i { background: #adff41; box-shadow: 0 0 10px #adff4166; }
+.p1-scene { flex: 0 0 auto; padding-top: 2px; }
+.p1-detail { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.p1-detail h2 { margin: 0 0 5px; font-size: clamp(20px, 2.3vw, 34px); font-weight: 550; }
+.p1-description { margin: 0; font-size: 13px; line-height: 1.5; }
+.p1-start { min-width: 100px; min-height: 44px; padding: 8px 12px; background: #f5f4fa; color: #444e64; text-align: left; }
+.p1-start span { float: right; }
+.p1-start:disabled { opacity: .6; }
+.p1-scenes { display: flex; gap: 8px; margin-bottom: 10px; }
+.p1-scenes button { border: 1px solid #ffffff58; padding: 7px 10px; color: #fff; font-size: 12px; }
+.p1-scenes button[aria-pressed="true"] { background: #f5f4fa; color: #444e64; }
+.p1-feedback { margin: 5px 0 0; font-size: 12px; line-height: 1.4; }
+.p1-feedback:empty { display: none; }
+.p1-photo { display: flex; align-items: center; gap: 12px; font-size: 12px; margin-top: 7px; }
+.p1-photo button { border: 1px solid #fff8; padding: 8px 10px; }
+.p1-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: clamp(16px, 3vw, 26px);
+  overflow: auto;
+  background: #545c70;
+  color: #fff;
+  border: 1px solid #ffffff60;
+  box-shadow: 0 24px 70px #1d223c88;
+}
+.p1-dialog::backdrop { background: #222a3e9c; backdrop-filter: blur(7px); }
+.p1-dialog > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.p1-dialog h2 { margin: 0; font-size: 22px; }
+.p1-dialog p { line-height: 1.55; }
+.p1-dialog > header button { min-width: 44px; min-height: 44px; font-size: 26px; }
+.p1-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.p1-pair input { max-width: 10ch; min-height: 44px; padding: 5px; font-size: 20px; }
+.p1-pair button, .p1-dev-options > * { padding: 10px 12px; border: 1px solid #fff7; color: inherit; }
+.p1-dev-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.p1-anatomy { margin: 0; border: 1px solid #a2aabd; background: #424b60; }
+.p1-anatomy figcaption { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #ffffff30; font-size: 13px; }
+.p1-assembly svg { display: block; width: 100%; height: auto; }
+.p1-assembly [data-group] { transition: opacity .3s ease, filter .3s ease; }
+.p1-assembly svg[data-part] [data-group] { opacity: .46; }
+.p1-assembly svg[data-part="face"] [data-group~="face"],
+.p1-assembly svg[data-part="voice"] [data-group~="voice"],
+.p1-assembly svg[data-part="camera"] [data-group~="camera"],
+.p1-assembly svg[data-part="sense"] [data-group~="sense"],
+.p1-assembly svg[data-part="motor"] [data-group~="motor"],
+.p1-assembly svg[data-part="tilt"] [data-group~="tilt"],
+.p1-assembly svg[data-part="altitude"] [data-group~="altitude"] {
+  opacity: 1;
+  filter: brightness(1.33);
+}
+.p1-parts { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px; }
+.p1-parts button { padding: 9px 11px; min-height: 40px; border: 1px solid #ffffff46; color: inherit; }
+.p1-parts button[aria-pressed="true"] { background: #e9edfa; color: #323c52; }
+.p1-part-detail { padding: 12px; }
+.p1-part-detail p { font-size: 13px; margin: 5px 0 0; }
+.p1-part-detail strong { font-size: 13px; }
+.p1-toolbar [hidden], .p1-scene [hidden], .p1-dialog [hidden] { display: none !important; }
+.experience .scene-tabs button, .experience .media-controls button,
+.experience .p1-toolbar button, .p1-parts button, .p1-scenes button { min-height: 44px; }
+.experience .p1-toolbar button { padding-inline: 8px; }
+@media (orientation: landscape) and (max-width: 1100px) {
+  .experience .hero { width: 40%; }
+  .experience .moments { left: 40%; padding: 16px; gap: 10px; }
+  .experience .scene-tabs button { font-size: clamp(8px, 1.05vw, 11px); padding-inline: 4px; }
+  .experience .scene-tabs button small { display: none; }
+  .p1-detail h2 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p1-assembly [data-group] { transition: none; }
+}

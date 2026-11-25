@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动态表情预览</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #f4f3eb;
+    color: #19241e;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  main { width: min(100% - 40px, 800px); margin: 0 auto; padding: 38px 0; }
+  header { margin-bottom: 16px; }
+  h1 { margin: 0; font-size: clamp(32px, 6vw, 52px); line-height: 1.12; font-weight: 750; }
+  canvas { display: block; width: 100%; height: auto; background: #32ce60; border-radius: 12px; }
+  canvas:fullscreen { width: 100vw; height: 100vh; object-fit: contain; border-radius: 0; }
+  .appearance { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  input[type="color"] { flex: none; width: 48px; height: 38px; padding: 2px; cursor: pointer; }
+  .controls { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+  button {
+    min-height: 44px;
+    min-width: 86px;
+    border: 1px solid #19241e;
+    border-radius: 7px;
+    background: #19241e;
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #304638; }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  .export { margin-top: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .export span { font-size: 13px; color: #45564d; }
+  .expressions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .expressions button { min-width: 0; padding: 0 14px; background: transparent; color: #19241e; border-color: #b9c4b8; }
+  .expressions button:hover { background: #e2eadf; }
+  .expressions button[aria-pressed="true"] { background: #19241e; color: #fff; border-color: #19241e; }
+  :focus-visible { outline: 2px solid #087833; outline-offset: 4px; }
+  input { flex: 1; min-width: 0; margin: 0; height: 32px; accent-color: #247740; cursor: pointer; }
+  output { font: 13px ui-monospace, monospace; min-width: 8.5ch; text-align: right; color: #45564d; }
+  @media (max-width: 480px) {
+    main { width: calc(100% - 28px); padding: 24px 0; }
+    .controls { gap: 10px; }
+    output { min-width: 5ch; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>动态表情预览</h1></header>
+  <div class="expressions" id="expressions" role="group" aria-label="选择情绪"></div>
+  <div class="appearance">
+    <label for="background">背景颜色</label>
+    <input id="background" type="color" value="#32ce60">
+    <button id="fullscreen" type="button">全屏预览</button>
+  </div>
+  <canvas id="face" width="844" height="580" role="img" aria-label="困惑"></canvas>
+  <div class="controls">
+    <button type="button" id="play">播放</button>
+    <input type="range" id="timeline" min="0" step="1" value="0" aria-label="动画进度">
+    <output for="timeline" id="time"></output>
+  </div>
+  <div class="export">
+    <button type="button" id="export-gif">导出 GIF</button>
+    <span id="export-status" role="status">844 × 580 · 20 帧/秒 · 循环播放，导出预设动作</span>
+  </div>
+</main>
+<script src="vendor/gifenc.js"></script>
+<script>
+// Playback clock from grok-bot-study dfe1140, web/bot-element.jsx.
+class MotionClock {
+  constructor(onFrame) {
+    this.elapsed = 0;
+    this.origin = performance.now();
+    this.running = false;
+    this.pending = null;
+    this.frame = null;
+    this.painted = false;
+    this.onFrame = onFrame;
+  }
+  now() { return this.elapsed + (this.running ? performance.now() - this.origin : 0); }
+  setRunning(value) {
+    if (value === this.running) return;
+    this.elapsed = this.now();
+    this.origin = performance.now();
+    this.running = value;
+    cancelAnimationFrame(this.frame);
+    this.frame = null;
+    if (value && this.pending) this.schedule();
+  }
+  schedule() {
+    if (this.frame !== null || !this.pending) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = null;
+      const callback = this.pending;
+      this.pending = null;
+      this.painted = true;
+      const time = this.now();
+      if (this.running) this.onFrame?.(time);
+      callback?.(time);
+    });
+  }
+  requestFrame(callback) {
+    this.pending = callback;
+    if (this.running || !this.painted) this.schedule();
+    return this.frame;
+  }
+  cancelFrame() {
+    cancelAnimationFrame(this.frame);
+    this.frame = null;
+    this.pending = null;
+  }
+}
+
+// Spring integration and gaze damping from grok-bot-study dfe1140, web/motion-engine.js.
+const stepSeconds = 1 / 120;
+const gazeFrequency = 13;
+const gazeDamping = 1;
+
+function stepSpring(spring, target, frequency, damping = gazeDamping) {
+  const acceleration = -2 * damping * frequency * spring.velocity
+    - frequency ** 2 * (spring.position - target);
+  spring.velocity += acceleration * stepSeconds;
+  spring.position += spring.velocity * stepSeconds;
+  if (!Number.isFinite(spring.position) || !Number.isFinite(spring.velocity)) {
+    spring.position = target;
+    spring.velocity = 0;
+  }
+}
+
+const expressions = {
+  idle: {
+    label: '待机', duration: 10400,
+    pose: {
+      blinkCenterY: 274,
+      eyes: [
+        { circle: [282.6, 274, 139.7], pupil: [282.6, 274, 73] },
+        { circle: [561.8, 274, 139.7], pupil: [561.8, 274, 73] },
+      ],
+    },
+    shape: [{ at: 0, value: 0 }],
+    gazeSpeed: 4,
+    gaze: [
+      { at: 0, x: 0, y: 0 },
+      { at: 2400, x: -8, y: 2 },
+      { at: 4300, x: 0, y: 0 },
+      { at: 6800, x: 7, y: -2 },
+      { at: 8500, x: 0, y: 0 },
+    ],
+    blinks: [1900, 6350],
+    motionFrequency: 3,
+    motion: [
+      { at: 300, stretch: 1.012, lift: 2 },
+      { at: 2100, stretch: 0.995, lift: -1 },
+      { at: 4000, stretch: 1.012, lift: 2 },
+      { at: 6000, stretch: 0.995, lift: -1 },
+      { at: 8000, stretch: 1.008, lift: 1 },
+      { at: 9400 },
+    ],
+  },
+  waiting: {
+    label: '等待', duration: 10400,
+    pose: { waiting: true },
+    shape: [{ at: 0, value: 0 }],
+    gaze: [{ at: 0, x: 0, y: 0 }],
+    blinks: [], motion: [],
+  },
+  confused: {
+    label: '困惑',
+    duration: 10400,
+    gaze: [
+      { at: 0, x: 0, y: 0 },
+      { at: 240, x: 28, y: -6 },
+      { at: 1050, x: -125, y: -28 },
+      { at: 1940, x: -58, y: -106 },
+      { at: 2800, x: -28, y: -40 },
+      { at: 3370, x: 26, y: -60 },
+      { at: 3740, x: -110, y: -34 },
+      { at: 4140, x: 22, y: -52 },
+      { at: 4540, x: -104, y: -27 },
+      { at: 5120, x: -55, y: -42 },
+      { at: 5700, x: 25, y: -6 },
+      { at: 6380, x: 0, y: 0 },
+    ],
+    blinks: [1680, 2860, 3230, 5240, 5610],
+    shape: [
+      { at: 0, value: 0 },
+      { at: 1050, value: 1 },
+      { at: 3370, value: 0 },
+      { at: 5690, value: 1 },
+      { at: 8010, value: 0 },
+    ],
+    motionFrequency: 14,
+    motion: [
+      { at: 240, tilt: 0.32, stretch: 1.18, lift: 14 },
+      { at: 1050, tilt: -0.34, stretch: 0.84, lift: -8 },
+      { at: 1940, tilt: 0.17, stretch: 1.29, lift: 28 },
+      { at: 2660, tilt: 0.04, stretch: 0.83, lift: -10 },
+      { at: 3370, tilt: 0.29, stretch: 1.12 },
+      { at: 3740, tilt: -0.29, stretch: 0.92 },
+      { at: 4140, tilt: 0.25, stretch: 1.10 },
+      { at: 4540, tilt: -0.23, stretch: 0.94 },
+      { at: 5120, tilt: -0.05, stretch: 0.82 },
+      { at: 5700, tilt: 0.31, stretch: 1.23, lift: 18 },
+      { at: 6380 },
+    ],
+  },
+  happy: {
+    label: '开心', duration: 10400, pose: {
+      blinkCenterY: 274,
+      eyes: [
+        { circle: [282.6, 274, 139.7], cutout: [164, 530, 115], smileCutout: [192, 421, 132], pupil: [305.8, 273.6, 78.5] },
+        { circle: [561.8, 274, 139.7], cutout: [684, 530, 115], smileCutout: [652.4, 421, 132], pupil: [540.9, 273.6, 78.5] },
+      ],
+    },
+    gaze: [
+      { at: 0, x: 0, y: 0 }, { at: 750, x: -5, y: 2 },
+      { at: 2900, x: 5, y: 0 }, { at: 5200, x: -4, y: 3 },
+      { at: 8000, x: 0, y: 0 },
+    ],
+    blinks: [3700, 8400],
+    motionFrequency: 5.5,
+    motion: [
+      { at: 650, cheekLift: 28 },
+      { at: 1050, cheekLift: 58 },
+      { at: 1850, cheekLift: 43 },
+      { at: 2350, cheekLift: 55 },
+      { at: 3150, cheekLift: 15 },
+      { at: 4650, cheekLift: 50 },
+      { at: 5650, cheekLift: 38 },
+      { at: 6250, cheekLift: 58 },
+      { at: 7650, cheekLift: 23 },
+      { at: 9000 },
+    ],
+  },
+  surprised: {
+    label: '惊讶', duration: 10400, pose: {
+      eyes: [
+        { rect: [115.1, 176.7, 291, 155.7], pupil: [310.8, 265.3, 50] },
+        { circle: [532.2, 254.5, 139.7], pupil: [570.3, 266.1, 61.5] },
+      ],
+    },
+    gaze: [
+      { at: 0, x: 0, y: 0 },
+      { at: 240, x: 0, y: -16 },
+      { at: 1900, x: 0, y: -5 },
+      { at: 3850, x: 2, y: -14 },
+      { at: 5400, x: 0, y: -4 },
+      { at: 8450, x: 0, y: -15 },
+      { at: 9600, x: 0, y: 0 },
+    ],
+    blinks: [],
+    shape: [
+      { at: 0, value: 0 },
+      { at: 5200, value: 1 },
+      { at: 9300, value: 0 },
+    ],
+    motionFrequency: 11,
+    motion: [
+      { at: 200, circleScale: 1.26, pupilScale: 0.76, squareScale: 0.92, squareSquint: 0.76, eyeTilt: 0.12, tilt: 0.055 },
+      { at: 1800, circleScale: 1.12, pupilScale: 0.90, squareScale: 0.97, squareSquint: 0.89, eyeTilt: 0.06, tilt: 0.02 },
+      { at: 3550, circleScale: 1.25, pupilScale: 0.78, squareScale: 0.93, squareSquint: 0.75, eyeTilt: 0.13, tilt: -0.05 },
+      { at: 5250, circleScale: 1.10, pupilScale: 0.92, squareScale: 0.98, squareSquint: 0.90, eyeTilt: 0.05 },
+      { at: 5950, circleScale: 1.24, pupilScale: 0.79, squareScale: 0.92, squareSquint: 0.77, eyeTilt: 0.12, tilt: 0.05 },
+      { at: 7800, circleScale: 1.09, pupilScale: 0.94, squareScale: 0.98, squareSquint: 0.92, eyeTilt: 0.04 },
+      { at: 8290, circleScale: 1.25, pupilScale: 0.78, squareScale: 0.93, squareSquint: 0.76, eyeTilt: 0.12, tilt: -0.045 },
+      { at: 9650 },
+    ],
+  },
+  angry: {
+    label: '生气', duration: 10400, pose: { top: 243, slope: 0.32, pupilRadius: 64 },
+    shape: [{ at: 0, value: 0 }],
+    gaze: [
+      { at: 0, x: -58, y: -26 },
+      { at: 300, x: -54, y: -19 },
+      { at: 2650, x: -58, y: -23 },
+      { at: 5100, x: -54, y: -18 },
+      { at: 7550, x: -58, y: -23 },
+      { at: 9600, x: -58, y: -26 },
+    ],
+    blinks: [4200, 8800],
+    motionFrequency: 12,
+    motion: [
+      { at: 300, pinch: 42, stretch: 0.80, browPress: 12, lift: 7 },
+      { at: 1150, pinch: 48, stretch: 0.70, browPress: 22, tremble: 3.5, lift: -4 },
+      { at: 1950, pinch: 35, stretch: 0.83, browPress: 10, lift: 5 },
+      { at: 2850, pinch: 45, stretch: 0.74, browPress: 18, tremble: 2.5 },
+      { at: 3500, pinch: 20, stretch: 0.94, browPress: 4, lift: -10 },
+      { at: 5000, pinch: 44, stretch: 0.78, browPress: 16, lift: 8 },
+      { at: 6050, pinch: 49, stretch: 0.68, browPress: 23, tremble: 4, lift: -4 },
+      { at: 6900, pinch: 36, stretch: 0.84, browPress: 10, lift: 5 },
+      { at: 7750, pinch: 44, stretch: 0.75, browPress: 18, tremble: 2.5 },
+      { at: 8500, pinch: 20, stretch: 0.94, browPress: 4, lift: -10 },
+      { at: 9550 },
+    ],
+  },
+  sad: {
+    label: '伤心', duration: 10400, pose: { top: 232, slope: -0.22, pupilRadius: 65 },
+    shape: [{ at: 0, value: 0 }],
+    gaze: [
+      { at: 0, x: -63, y: 12 },
+      { at: 550, x: -63, y: 33 },
+      { at: 1900, x: -68, y: 43 },
+      { at: 3450, x: -56, y: -25 },
+      { at: 4250, x: -59, y: -15 },
+      { at: 5050, x: -65, y: 40 },
+      { at: 6750, x: -70, y: 45 },
+      { at: 8100, x: -63, y: 28 },
+      { at: 9450, x: -63, y: 12 },
+    ],
+    blinks: [2150, 7100], blinkRate: 2.6,
+    motionFrequency: 4,
+    motion: [
+      { at: 400, lift: -28, stretch: 0.86, tilt: 0.035, browPress: 4 },
+      { at: 1450, lift: -54, stretch: 0.72, tilt: 0.055, browPress: 9, sob: 13 },
+      { at: 2800, lift: -44, stretch: 0.78, tilt: 0.04, browPress: 6 },
+      { at: 3450, lift: 5, stretch: 1.05, tilt: -0.025 },
+      { at: 4300, lift: -12, stretch: 0.94, tilt: -0.01 },
+      { at: 5050, lift: -58, stretch: 0.69, tilt: 0.055, browPress: 10, sob: 17 },
+      { at: 6400, lift: -48, stretch: 0.76, tilt: 0.045, browPress: 7, sob: 10 },
+      { at: 7800, lift: -31, stretch: 0.84, tilt: 0.025, browPress: 4 },
+      { at: 9200 },
+    ],
+  },
+  bored: {
+    label: '无聊', duration: 10400, pose: { top: 249, pupilRadius: 70 },
+    shape: [
+      { at: 0, value: 0 },
+      { at: 4200, value: 1 },
+      { at: 9000, value: 0 },
+    ],
+    gazeSpeed: 4,
+    gaze: [
+      { at: 0, x: -36, y: -54 },
+      { at: 650, x: -126, y: -54 },
+      { at: 2350, x: -110, y: -60 },
+      { at: 2950, x: -38, y: -62 },
+      { at: 3650, x: 12, y: -60 },
+      { at: 4900, x: 8, y: -52 },
+      { at: 5900, x: -105, y: -52 },
+      { at: 7700, x: -111, y: -59 },
+      { at: 8350, x: -42, y: -61 },
+      { at: 9450, x: -36, y: -54 },
+    ],
+    blinks: [6500], blinkRate: 2.5,
+    motionFrequency: 3.5,
+    motion: [
+      { at: 500, stretch: 0.84, lift: -10, tilt: -0.035, browPress: 6 },
+      { at: 1700, stretch: 0.72, lift: -22, tilt: -0.045, browPress: 13 },
+      { at: 2950, stretch: 0.79, lift: -15, tilt: -0.02, browPress: 9 },
+      { at: 4600, stretch: 0.82, lift: -10, tilt: 0.03, browPress: 7 },
+      { at: 5900, stretch: 0.70, lift: -24, tilt: 0.045, browPress: 14 },
+      { at: 7700, stretch: 0.77, lift: -17, tilt: 0.02, browPress: 10 },
+      { at: 9250 },
+    ],
+  },
+  drowsy: {
+    label: '困了', duration: 10400,
+    pose: { top: 260, height: 0.63, pupilRadius: 61, pupilInward: 12 },
+    shape: [{ at: 0, value: 0 }],
+    gazeSpeed: 5,
+    gaze: [
+      { at: 0, x: -53, y: -33 },
+      { at: 500, x: -53, y: -10 },
+      { at: 1650, x: -53, y: 18 },
+      { at: 2880, x: -53, y: -40, speed: 24 },
+      { at: 3650, x: -53, y: -20 },
+      { at: 4600, x: -53, y: 0 },
+      { at: 5900, x: -53, y: 20 },
+      { at: 7050, x: -53, y: -40, speed: 24 },
+      { at: 7900, x: -53, y: -20 },
+      { at: 9400, x: -53, y: -33 },
+    ],
+    blinks: [],
+    motionFrequency: 4,
+    motion: [
+      { at: 350, stretch: 0.80, lift: -10, tilt: 0.02 },
+      { at: 1100, stretch: 0.46, lift: -30, tilt: 0.04 },
+      { at: 2000, stretch: 0.16, lift: -48, tilt: 0.06 },
+      { at: 2650, stretch: 0.018, lift: -112, tilt: 0.14, speed: 24 },
+      { at: 2880, stretch: 1.65, lift: 30, tilt: -0.04, browPress: -95, speed: 30 },
+      { at: 3180, stretch: 1.35, lift: 8, tilt: -0.015, browPress: -70, speed: 15 },
+      { at: 3650, stretch: 0.85, lift: -5, tilt: 0.01 },
+      { at: 4600, stretch: 0.50, lift: -26, tilt: 0.04 },
+      { at: 5800, stretch: 0.12, lift: -50, tilt: 0.07 },
+      { at: 6800, stretch: 0.018, lift: -120, tilt: 0.15, speed: 24 },
+      { at: 7050, stretch: 1.70, lift: 32, tilt: -0.045, browPress: -100, speed: 30 },
+      { at: 7380, stretch: 1.35, lift: 10, tilt: -0.015, browPress: -70, speed: 15 },
+      { at: 7900, stretch: 0.78, lift: -8, tilt: 0.02 },
+      { at: 8800, stretch: 0.55, lift: -20, tilt: 0.03 },
+      { at: 9400 },
+    ],
+  },
+};
+
+// The source steers the lid spring through closure, reopening and settling.
+const blinkLidTargets = [
+  { at: 0, openness: 0.05 },
+  { at: 150, openness: 1.08 },
+  { at: 300, openness: 1 },
+];
+const lidFrequency = 26;
+
+const shapeRhythm = [
+  { at: 0, value: 0 },
+  { at: 1050, value: 1 },
+  { at: 3370, value: 0 },
+  { at: 5690, value: 1 },
+  { at: 8010, value: 0 },
+];
+
+const restingMotion = { stretch: 1, pinch: 0, lift: 0, tilt: 0, cheekLift: 0, circleScale: 1, pupilScale: 1, squareScale: 1, squareSquint: 1, eyeTilt: 0, browPress: 0, tremble: 0, sob: 0 };
+
+function swapBlinkOpenness(timeFromSwap) {
+  const smooth = value => value * value * (3 - 2 * value);
+  if (timeFromSwap < -180 || timeFromSwap >= 230) return 1;
+  if (timeFromSwap < -35) return 1 - smooth((timeFromSwap + 180) / 145);
+  if (timeFromSwap <= 35) return 0;
+  return smooth((timeFromSwap - 35) / 195);
+}
+
+function buildClip({ duration, gaze, blinks, blinkRate = 1, motion, motionFrequency = 10, gazeSpeed = gazeFrequency,
+  shape: requestedShape = shapeRhythm, pose = {} }) {
+  const bothRound = pose.eyes?.every(eye => eye.circle);
+  const shape = bothRound ? [{ at: 0, value: 0 }] : requestedShape;
+  const swaps = shape.slice(1);
+  const regularBlinks = blinks.filter(start => swaps.every(swap =>
+    start + 300 * blinkRate < swap.at - 350 || start > swap.at + 580));
+  const lids = [{ at: 0, openness: 1 }, ...regularBlinks.flatMap(start =>
+    blinkLidTargets.map(({ at, openness }) => ({ at: start + at * blinkRate, openness })))];
+  const x = { position: gaze[0].x, velocity: 0 };
+  const y = { position: gaze[0].y, velocity: 0 };
+  const lid = { position: 1, velocity: 0 };
+  const motionSprings = Object.entries(restingMotion).map(([channel, position]) =>
+    ({ channel, position, velocity: 0 }));
+  const motionTargets = [restingMotion, ...motion];
+  const restingFrame = { x: x.position, y: y.position, openness: 1, ...restingMotion, shapeMix: 0, shapeVelocity: 0, shakeX: 0, shakeY: 0 };
+  const frames = [restingFrame];
+  let keyframe = 0;
+  let lidKeyframe = 0;
+  let motionKeyframe = 0;
+  let shapeKeyframe = 0;
+
+  for (let index = 1; index < Math.ceil(duration / (stepSeconds * 1000)); index++) {
+    const time = index * stepSeconds * 1000;
+    while (gaze[keyframe + 1]?.at <= time) keyframe++;
+    while (lids[lidKeyframe + 1]?.at <= time) lidKeyframe++;
+    while (motionTargets[motionKeyframe + 1]?.at <= time) motionKeyframe++;
+    while (shape[shapeKeyframe + 1]?.at <= time) shapeKeyframe++;
+    stepSpring(x, gaze[keyframe].x, gaze[keyframe].speed ?? gazeSpeed);
+    stepSpring(y, gaze[keyframe].y, gaze[keyframe].speed ?? gazeSpeed);
+    stepSpring(lid, lids[lidKeyframe].openness, lidFrequency);
+    const blinkOpenness = Math.min(1, ...swaps.map(swap => swapBlinkOpenness(time - swap.at)));
+    const frame = {
+      x: x.position, y: y.position,
+      openness: Math.min(1, lid.position, blinkOpenness),
+      shapeMix: shape[shapeKeyframe].value, shapeVelocity: 0,
+    };
+    if (pose.waiting) frame.waitingTime = time;
+    for (const spring of motionSprings) {
+      const { channel } = spring;
+      const target = motionTargets[motionKeyframe][channel] ?? restingMotion[channel];
+      stepSpring(spring, target, motionTargets[motionKeyframe].speed ?? motionFrequency,
+        channel === 'circleScale' ? 0.68 : gazeDamping);
+      frame[channel] = spring.position;
+    }
+    // Three short catches of breath followed by a longer pause.
+    const sobPhase = time % 1500;
+    const sobPulse = [80, 400, 740].reduce((pulse, start) => {
+      const progress = (sobPhase - start) / 220;
+      return pulse + (progress > 0 && progress < 1 ? Math.sin(Math.PI * progress) ** 2 : 0);
+    }, 0);
+    frame.shakeX = frame.tremble * (Math.sin(time * 0.055) + 0.35 * Math.sin(time * 0.093))
+      + frame.sob * sobPulse * 0.12 * Math.sin(time * 0.026);
+    frame.shakeY = frame.tremble * 0.3 * Math.sin(time * 0.071) - frame.sob * sobPulse;
+    frame.stretch *= 1 - Math.min(1, frame.sob / 12) * sobPulse * 0.14;
+    frames.push(frame);
+  }
+  // Settle smoothly into the exact starting pose before the loop boundary.
+  const returnStart = Math.round((duration - 700) / (stepSeconds * 1000));
+  for (let index = returnStart; index < frames.length; index++) {
+    const progress = Math.min(1, (index - returnStart) / (frames.length - 1 - returnStart));
+    const blend = progress * progress * (3 - 2 * progress);
+    for (const key of Object.keys(restingFrame)) {
+      frames[index][key] += (restingFrame[key] - frames[index][key]) * blend;
+    }
+  }
+  frames[frames.length - 1] = { ...restingFrame };
+  frames.push(restingFrame);
+  return { duration, frames };
+}
+
+const canvas = document.querySelector('#face');
+const context = canvas.getContext('2d', { willReadFrequently: true });
+const defaultEyes = [
+  { shape: new Path2D(), centerX: 257.55, centerY: 256.65, rectangleWidth: 299.7, rectangleHeight: 161.5, circleDiameter: 287.7, startsRound: false, pupilX: 308.7, pupilY: 288.9 },
+  { shape: new Path2D(), centerX: 537.1, centerY: 256.45, rectangleWidth: 299.7, rectangleHeight: 161.5, circleDiameter: 287.7, startsRound: true, pupilX: 600.3, pupilY: 306.2 },
+];
+defaultEyes[0].shape.rect(107.7, 175.9, 299.7, 161.5);
+defaultEyes[1].shape.arc(537.1, 256.45, 143.85, 0, 2 * Math.PI);
+
+function buildReferenceEye({ rect, circle, cutout, smileCutout, pupil }) {
+  const shape = new Path2D();
+  if (rect) shape.rect(...rect);
+  else shape.arc(...circle, 0, 2 * Math.PI);
+  let mask;
+  if (cutout) {
+    mask = new Path2D();
+    mask.rect(-800, -800, 2400, 2400);
+    mask.moveTo(cutout[0] + cutout[2], cutout[1]);
+    mask.arc(...cutout, 0, 2 * Math.PI);
+  }
+  const [pupilX, pupilY, pupilRadius] = pupil;
+  const startsRound = Boolean(circle);
+  const circleDiameter = circle ? circle[2] * 2 : rect[2];
+  const rectangleWidth = rect ? rect[2] : circleDiameter * 299.7 / 287.7;
+  const rectangleHeight = rect ? rect[3] : circleDiameter * 161.5 / 287.7;
+  const centerX = circle ? circle[0] : rect[0] + rect[2] / 2;
+  const centerY = circle ? circle[1] : rect[1] + rect[3] / 2;
+  return { shape, mask, cutout, smileCutout, pupilX, pupilY, pupilRadius, startsRound,
+    circleDiameter, rectangleWidth, rectangleHeight, centerX, centerY };
+}
+
+function buildEyeMasks({ top = -100, slope = 0 }) {
+  return defaultEyes.map(({ centerX }, index) => {
+    const angle = index === 0 ? slope : -slope;
+    const left = centerX - 160;
+    const right = centerX + 160;
+    const mask = new Path2D();
+    mask.moveTo(left, top - 160 * angle);
+    mask.lineTo(right, top + 160 * angle);
+    mask.lineTo(right, 700);
+    mask.lineTo(left, 700);
+    mask.closePath();
+    return mask;
+  });
+}
+
+function morphEyeShapes(amount, velocity = 0) {
+  const mix = Math.max(0, Math.min(1, amount));
+  return eyes.map(eye => {
+    const roundness = eye.startsRound ? 1 - mix : mix;
+    const width = eye.rectangleWidth + (eye.circleDiameter - eye.rectangleWidth) * roundness;
+    const height = eye.rectangleHeight + (eye.circleDiameter - eye.rectangleHeight) * roundness;
+    const direction = eye.startsRound ? -1 : 1;
+    const squash = Math.tanh(velocity / 8) * 0.14 * direction;
+    const shape = new Path2D();
+    // Morph each eye around its own fixed center, with symmetric squash and stretch.
+    for (let point = 0; point <= 128; point++) {
+      const angle = point / 128 * Math.PI * 2;
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      const exponent = 2 / Math.max(roundness, 0.005);
+      const radius = roundness === 0
+        ? 1 / Math.max(Math.abs(cosine), Math.abs(sine))
+        : Math.pow(Math.abs(cosine) ** exponent + Math.abs(sine) ** exponent, -1 / exponent);
+      const x = eye.centerX + width / 2 * cosine * radius * (1 + squash);
+      const y = eye.centerY + height / 2 * sine * radius / (1 + squash);
+      if (point === 0) shape.moveTo(x, y);
+      else shape.lineTo(x, y);
+    }
+    shape.closePath();
+    return { ...eye, shape };
+  });
+}
+
+function smoothProgress(value) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function drawWaiting({ eyeX, eyeY, waitingTime = 0, morph = 1 }) {
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (!measuringBounds) {
+    context.fillStyle = backgroundColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  context.save();
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.scale(layoutScale, layoutScale);
+  context.translate(eyeX, eyeY);
+  // One uninterrupted pull-in, rather than restarting easing at each beat.
+  const gatherTime = Math.min(1, morph / 0.57);
+  const gather = smoothProgress(gatherTime);
+  const distance = 139.6 * (1 - gather) ** 1.3;
+  const rebound = (start, end) => {
+    const t = (gatherTime - start) / (end - start);
+    return t > 0 && t < 1 ? Math.sin(Math.PI * t) ** 2 : 0;
+  };
+  let radius = 139.7 - 106.7 * gather - 8 * rebound(0.65, 0.80) + 5 * rebound(0.80, 1);
+  let scaleX = 1 + 0.12 * Math.sin(gatherTime * Math.PI * 2) * Math.sin(gatherTime * Math.PI);
+  let scaleY = 1 / scaleX;
+  let spread = 0;
+  if (morph > 0.57) {
+    const beats = [
+      [0.57, 33, 1,    1,    0],
+      [0.79, 30, 0.92, 1.10, 1.09],
+      [0.90, 34, 1.04, 0.96, 0.97],
+      [1,    33, 1,    1,    1],
+    ];
+    const next = beats.findIndex(beat => beat[0] >= morph);
+    const from = beats[next - 1];
+    const to = beats[next];
+    const blend = smoothProgress((morph - from[0]) / (to[0] - from[0]));
+    [radius, scaleX, scaleY, spread] = from.slice(1).map((value, index) =>
+      value + (to[index + 1] - value) * blend);
+  }
+  const waveStrength = smoothProgress(Math.min(waitingTime, 10400 - waitingTime) / 450);
+  const gathering = morph <= 0.57;
+  const count = gathering ? (distance < 0.001 ? 1 : 2) : 6;
+  // Whites are drawn together before pupils, so overlapping eyes merge cleanly.
+  const dots = Array.from({ length: count }, (_, index) => {
+    const phase = waitingTime / 1040 - index / 6;
+    const pulse = Math.max(0, Math.cos(phase * Math.PI * 2)) ** 4 * waveStrength;
+    return {
+      x: gathering ? (count === 1 ? 0 : (index === 0 ? -distance : distance))
+        : (index - 2.5) * 100 * spread,
+      y: -32 * pulse,
+      radius: radius + 5 * pulse,
+      sx: scaleX * (1 - 0.10 * pulse),
+      sy: scaleY * (1 + 0.17 * pulse),
+    };
+  });
+  context.fillStyle = '#fff';
+  for (const dot of dots) {
+    context.beginPath();
+    context.ellipse(dot.x, dot.y, dot.radius * dot.sx, dot.radius * dot.sy, 0, 0, Math.PI * 2);
+    context.fill();
+  }
+  if (gathering && count === 2) {
+    // Pupils follow the gathering whites and simply fade out in place.
+    // Keep their size fixed; no upward roll or independent shrinking.
+    const pupilOpacity = 1 - smoothProgress((gather - 0.03) / 0.57);
+    dots.forEach(dot => {
+      context.save();
+      context.beginPath();
+      context.ellipse(dot.x, dot.y, dot.radius * dot.sx, dot.radius * dot.sy, 0, 0, Math.PI * 2);
+      context.clip();
+      context.fillStyle = '#000';
+      context.globalAlpha = pupilOpacity;
+      context.beginPath();
+      context.arc(dot.x, dot.y, 73, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    });
+  }
+  context.restore();
+}
+
+function drawFace({ x, y, openness, eyeX, eyeY, stretch, pinch, lift, tilt, shapeMix, shapeVelocity, cheekLift, circleScale, pupilScale, squareScale, squareSquint, eyeTilt, browPress, shakeX, shakeY, waitingTime }) {
+  if (pose.waiting) {
+    drawWaiting({ openness, eyeX, eyeY, waitingTime });
+    return;
+  }
+  const frameEyes = shapeMix !== 0 || shapeVelocity !== 0
+    ? morphEyeShapes(shapeMix, shapeVelocity)
+    : eyes;
+  const roundEyes = frameEyes.map(eye => eye.startsRound ? shapeMix === 0 : shapeMix === 1);
+  const eyeScales = roundEyes.map(isRound => isRound ? circleScale : squareScale);
+  const applyEyeTransform = (eye, index) => {
+    const angle = eyeTilt * (index === 0 ? 1 : -1) * (roundEyes[index] ? -0.2 : 1);
+    context.translate((index === 0 ? pinch : -pinch) + eye.centerX, eye.centerY);
+    context.rotate(angle);
+    context.scale(eyeScales[index], eyeScales[index] * (roundEyes[index] ? 1 : squareSquint));
+    context.translate(-eye.centerX, -eye.centerY);
+  };
+  const expressionMasks = browPress === 0 ? eyeMasks
+    : buildEyeMasks({ ...pose, top: pose.top + browPress });
+  const frameMasks = frameEyes.map((eye, index) => {
+    if (!eye.cutout || cheekLift === 0) return eye.mask ?? expressionMasks?.[index];
+    const amount = Math.max(0, Math.min(1, cheekLift / 58));
+    const [x, y, radius] = eye.cutout.map((value, axis) =>
+      value + ((eye.smileCutout ?? eye.cutout)[axis] - value) * amount);
+    const mask = new Path2D();
+    mask.rect(-800, -800, 2400, 2400);
+    mask.moveTo(x + radius, y);
+    mask.arc(x, y, radius, 0, 2 * Math.PI);
+    return mask;
+  });
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (!measuringBounds) {
+    context.fillStyle = backgroundColor;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  context.save();
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.scale(layoutScale, layoutScale);
+  context.translate(-canvas.width / 2, -canvas.height / 2);
+  const eyeCenterX = canvas.width / 2;
+  const eyeCenterY = pose.blinkCenterY ?? 256.5;
+  context.translate(eyeCenterX + eyeX + shakeX, eyeCenterY + eyeY - lift + shakeY);
+  context.rotate(tilt);
+  context.scale(1, openness * stretch * (pose.height ?? 1));
+  context.translate(-eyeCenterX, -eyeCenterY);
+  context.fillStyle = '#fff';
+  frameEyes.forEach((eye, index) => {
+    context.save();
+    applyEyeTransform(eye, index);
+    const mask = frameMasks[index];
+    if (mask) context.clip(mask, 'evenodd');
+    context.fill(eye.shape);
+    context.restore();
+  });
+  frameEyes.forEach((eye, index) => {
+    context.save();
+    applyEyeTransform(eye, index);
+    context.clip(eye.shape);
+    const mask = frameMasks[index];
+    if (mask) context.clip(mask, 'evenodd');
+    context.fillStyle = '#000';
+    context.beginPath();
+    const inward = (pose.pupilInward ?? 0) * (index === 0 ? 1 : -1);
+    const radius = (eye.pupilRadius ?? pose.pupilRadius ?? 80.85)
+      * (roundEyes[index] ? pupilScale : 1) / eyeScales[index];
+    context.arc(eye.pupilX + x + inward, eye.pupilY + y, radius, 0, 2 * Math.PI);
+    context.fill();
+    context.restore();
+  });
+  context.restore();
+
+}
+
+let measuringBounds = false;
+let layoutScale = 1;
+let backgroundColor = '#32ce60';
+
+function measureFrameBounds(frame) {
+  drawFace({ ...frame, eyeX: 0,
+    eyeY: (pose.eyeBounce ?? 0) * (frame.y - clip.frames[0].y) });
+  const { width, height } = canvas;
+  const pixels = context.getImageData(0, 0, width, height).data;
+  let left = width, right = -1, top = height, bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (pixels[(y * width + x) * 4 + 3] === 0) continue;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = y;
+    }
+  }
+  return { left, right, top, bottom };
+}
+
+function measureLayout() {
+  measuringBounds = true;
+  layoutScale = 1;
+  try {
+    const resting = measureFrameBounds(clip.frames[0]);
+    const centerX = (resting.left + resting.right + 1) / 2;
+    const centerY = (resting.top + resting.bottom + 1) / 2;
+    let halfWidth = 0, halfHeight = 0;
+    for (let index = 0; index < clip.frames.length; index += 6) {
+      const bounds = measureFrameBounds(clip.frames[index]);
+      halfWidth = Math.max(halfWidth, centerX - bounds.left, bounds.right + 1 - centerX);
+      halfHeight = Math.max(halfHeight, centerY - bounds.top, bounds.bottom + 1 - centerY);
+    }
+    return {
+      x: canvas.width / 2 - centerX,
+      y: canvas.height / 2 - centerY,
+      scale: Math.min((canvas.width / 2 - 12) / (halfWidth + 30),
+        (canvas.height / 2 - 12) / (halfHeight + 20)),
+    };
+  } finally {
+    measuringBounds = false;
+  }
+}
+
+const timeline = document.querySelector('#timeline');
+const play = document.querySelector('#play');
+const timeLabel = document.querySelector('#time');
+const expressionControls = document.querySelector('#expressions');
+let clip;
+let pose;
+let eyes;
+let eyeMasks;
+let centerOffset;
+const scenes = new Map();
+let sharedLayoutScale;
+const transitionDuration = 800;
+const waitingEntryDuration = 500;
+const waitingExitDuration = 500;
+function sceneTransitionDuration(expression) {
+  return expression === expressions.waiting ? waitingEntryDuration : transitionDuration;
+}
+const clock = new MotionClock();
+let position = 0;
+let playbackStart = 0;
+let wasPlaying = false;
+let expressionFrame;
+let selectedExpression;
+let exporting = false;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let pointer = null;
+let followFrame = null;
+const gazeOffset = { x: 0, y: 0, weight: 0 };
+const pupilCenterOffset = { x: 48, y: 36 };
+const eyeFollowAmount = 0.35;
+
+function activateScene(scene) {
+  pose = scene.pose;
+  eyes = scene.eyes;
+  eyeMasks = scene.eyeMasks;
+  centerOffset = scene.centerOffset;
+}
+
+function drawCurrentFace() {
+  let scene = scenes.get(selectedExpression);
+  let frame = expressionFrame;
+  let transitionOpenness = 1;
+  if (selectedExpression === expressions.waiting && position > 0 && position < clip.duration) {
+    const core = scene.clip;
+    const morph = Math.min(1, position / waitingEntryDuration, (clip.duration - position) / waitingExitDuration);
+    const eyeX = (gazeOffset.x + pupilCenterOffset.x * gazeOffset.weight) * eyeFollowAmount;
+    const eyeY = (gazeOffset.y + pupilCenterOffset.y * gazeOffset.weight) * eyeFollowAmount;
+    drawWaiting({ eyeX, eyeY,
+      waitingTime: Math.max(0, Math.min(core.duration, position - waitingEntryDuration)), morph });
+    return;
+  }
+  if (selectedExpression !== expressions.idle) {
+    let transitionTime;
+    let useIdle = false;
+    if (position < transitionDuration) {
+      transitionTime = position;
+      useIdle = transitionTime < 350;
+    } else if (position >= clip.duration - transitionDuration) {
+      transitionTime = position - (clip.duration - transitionDuration);
+      useIdle = transitionTime >= 350;
+    }
+    if (transitionTime !== undefined) {
+      transitionOpenness = swapBlinkOpenness(transitionTime - 350);
+      if (useIdle) {
+        scene = scenes.get(expressions.idle);
+        frame = scene.clip.frames[0];
+      }
+    }
+  }
+  activateScene(scene);
+  const expressionWeight = 1 - 0.8 * gazeOffset.weight;
+  const eyeX = (gazeOffset.x + pupilCenterOffset.x * gazeOffset.weight) * eyeFollowAmount;
+  const eyeY = (gazeOffset.y + pupilCenterOffset.y * gazeOffset.weight) * eyeFollowAmount;
+  const referenceWeight = pose.eyes ? gazeOffset.weight : 0;
+  drawFace({
+    ...frame,
+    openness: frame.openness * transitionOpenness,
+    x: frame.x * expressionWeight + gazeOffset.x + pupilCenterOffset.x * referenceWeight,
+    y: frame.y * expressionWeight + gazeOffset.y + pupilCenterOffset.y * referenceWeight,
+    eyeX: centerOffset.x + eyeX,
+    eyeY: centerOffset.y + eyeY + (pose.eyeBounce ?? 0) * (frame.y - scene.clip.frames[0].y),
+  });
+}
+
+function updateFollow(now) {
+  const elapsed = Math.min(50, now - followFrameTime);
+  followFrameTime = now;
+  // Match the source's normalized pointer coordinates and time-based easing.
+  const blend = 1 - Math.pow(0.84, elapsed * 60 / 1000);
+  const target = pointer ?? { x: 0, y: 0, weight: 0 };
+  for (const axis of ['x', 'y', 'weight']) {
+    const difference = target[axis] - gazeOffset[axis];
+    gazeOffset[axis] = Math.abs(difference) < 0.01
+      ? target[axis]
+      : gazeOffset[axis] + difference * blend;
+  }
+  if (!clock.running) drawCurrentFace();
+  followFrame = gazeOffset.x === target.x && gazeOffset.y === target.y && gazeOffset.weight === target.weight
+    ? null
+    : requestAnimationFrame(updateFollow);
+}
+
+let followFrameTime = 0;
+function scheduleFollow() {
+  if (followFrame !== null) return;
+  followFrameTime = performance.now();
+  followFrame = requestAnimationFrame(updateFollow);
+}
+
+function clearPointer() {
+  if (!pointer) return;
+  pointer = null;
+  scheduleFollow();
+}
+
+canvas.addEventListener('pointermove', event => {
+  if (exporting || event.pointerType === 'touch' || reducedMotion.matches) return;
+  const rect = canvas.getBoundingClientRect();
+  const normalized = ratio => Math.max(-0.6, Math.min(0.6, ratio - 0.5));
+  pointer = {
+    x: 22 * normalized((event.clientX - rect.left) / rect.width) * 7.5 - pupilCenterOffset.x,
+    y: 14 * normalized((event.clientY - rect.top) / rect.height) * 7.5 - pupilCenterOffset.y,
+    weight: 1,
+  };
+  scheduleFollow();
+});
+canvas.addEventListener('pointerleave', clearPointer);
+canvas.addEventListener('pointercancel', clearPointer);
+window.addEventListener('blur', clearPointer);
+reducedMotion.addEventListener('change', clearPointer);
+
+function show(time) {
+  position = Math.min(clip.duration, time);
+  const core = scenes.get(selectedExpression).clip;
+  const elapsed = selectedExpression === expressions.idle ? position : position - sceneTransitionDuration(selectedExpression);
+  const coreTime = Math.max(0, Math.min(core.duration, elapsed));
+  const frameIndex = Math.min(core.frames.length - 1, Math.round(coreTime / (stepSeconds * 1000)));
+  expressionFrame = core.frames[frameIndex];
+  drawCurrentFace();
+  timeline.value = Math.round(position);
+  const seconds = (position / 1000).toFixed(2) + ' s';
+  timeLabel.textContent = seconds;
+  timeline.setAttribute('aria-valuetext', seconds);
+}
+
+function pause() {
+  clock.setRunning(false);
+  clock.cancelFrame();
+  play.textContent = position >= clip.duration ? '重播' : position > 0 ? '继续' : '播放';
+}
+
+function animate(now) {
+  show(now - playbackStart);
+  if (position >= clip.duration) {
+    pause();
+    return;
+  }
+  clock.requestFrame(animate);
+}
+
+function resume() {
+  if (position >= clip.duration) show(0);
+  playbackStart = clock.now() - position;
+  clock.setRunning(true);
+  play.textContent = '暂停';
+  clock.requestFrame(animate);
+}
+
+const expressionButtons = Object.values(expressions).map(expression => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = expression.label;
+  button.addEventListener('click', () => selectExpression(expression));
+  expressionControls.append(button);
+  return button;
+});
+
+function prepareScenes() {
+  for (const expression of Object.values(expressions)) {
+    clip = buildClip(expression);
+    pose = expression.pose ?? {};
+    eyes = pose.eyes?.map(buildReferenceEye) ?? defaultEyes;
+    eyeMasks = pose.top === undefined ? null : buildEyeMasks(pose);
+    const offset = measureLayout();
+    scenes.set(expression, { clip, pose, eyes, eyeMasks, centerOffset: offset });
+  }
+  sharedLayoutScale = Math.min(...Array.from(scenes.values(), scene => scene.centerOffset.scale));
+}
+
+function selectExpression(expression) {
+  if (scenes.size === 0) prepareScenes();
+  selectedExpression = expression;
+  const scene = scenes.get(expression);
+  activateScene(scene);
+  clip = { ...scene.clip,
+    duration: scene.clip.duration + (expression === expressions.idle ? 0
+      : expression === expressions.waiting ? waitingEntryDuration + waitingExitDuration : transitionDuration * 2) };
+  layoutScale = sharedLayoutScale;
+  timeline.max = clip.duration;
+  canvas.setAttribute('aria-label', expression.label);
+  for (const button of expressionButtons) {
+    button.setAttribute('aria-pressed', String(button.textContent === expression.label));
+  }
+  show(0);
+  pause();
+}
+
+play.addEventListener('click', () => {
+  if (clock.running) pause();
+  else resume();
+});
+
+timeline.addEventListener('input', () => {
+  show(Number(timeline.value));
+  pause();
+});
+
+const backgroundInput = document.querySelector('#background');
+backgroundInput.addEventListener('input', () => {
+  backgroundColor = backgroundInput.value;
+  canvas.style.backgroundColor = backgroundColor;
+  drawCurrentFace();
+});
+document.querySelector('#fullscreen').addEventListener('click', async () => {
+  if (document.fullscreenElement) await document.exitFullscreen();
+  else await canvas.requestFullscreen();
+});
+
+const exportButton = document.querySelector('#export-gif');
+const exportStatus = document.querySelector('#export-status');
+exportButton.addEventListener('click', async () => {
+  if (exporting) return;
+  const savedPosition = position;
+  const wasRunning = clock.running;
+  const controls = [...document.querySelectorAll('button, input')];
+  const rgb = backgroundColor.match(/[0-9a-f]{2}/gi).map(value => parseInt(value, 16));
+  const palette = [rgb, [255, 255, 255], [0, 0, 0]];
+  // Keep the same palette throughout the animation, including antialiased edges.
+  for (const [from, to] of [[palette[0], palette[1]], [palette[0], palette[2]], [palette[1], palette[2]]]) {
+    for (let step = 1; step < 16; step++) {
+      palette.push(from.map((value, index) => Math.round(value + (to[index] - value) * step / 16)));
+    }
+  }
+  pause();
+  exporting = true;
+  pointer = null;
+  cancelAnimationFrame(followFrame);
+  followFrame = null;
+  Object.assign(gazeOffset, { x: 0, y: 0, weight: 0 });
+  controls.forEach(control => { control.disabled = true; });
+  try {
+    const encoder = window.gifenc.GIFEncoder();
+    const delay = 50;
+    const frameCount = Math.ceil(clip.duration / delay);
+    for (let frame = 0; frame < frameCount; frame++) {
+      show(frame === frameCount - 1 ? clip.duration : frame * delay);
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const indexed = window.gifenc.applyPalette(data, palette);
+      encoder.writeFrame(indexed, canvas.width, canvas.height, {
+        palette: frame === 0 ? palette : undefined,
+        delay: Math.min(delay, clip.duration - frame * delay),
+        repeat: 0,
+      });
+      if (frame % 4 === 0) {
+        exportStatus.textContent = '正在导出 ' + Math.round((frame + 1) / frameCount * 100) + '%';
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+    encoder.finish();
+    const blob = new Blob([encoder.bytes()], { type: 'image/gif' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = selectedExpression.label + '-844x580.gif';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    exportStatus.textContent = '已导出「' + selectedExpression.label + '」 · ' + (blob.size / 1024 / 1024).toFixed(2) + ' MB';
+  } catch (error) {
+    console.error(error);
+    exportStatus.textContent = '导出失败，请重试。' + (error.message ?? '');
+  } finally {
+    exporting = false;
+    controls.forEach(control => { control.disabled = false; });
+    show(savedPosition);
+    if (wasRunning) resume();
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearPointer();
+    wasPlaying = clock.running;
+    if (wasPlaying) pause();
+  } else if (wasPlaying) {
+    wasPlaying = false;
+    resume();
+  }
+});
+
+selectExpression(expressions.idle);
+</script>
+</body>
+</html>
