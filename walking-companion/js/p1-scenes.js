@@ -22,7 +22,7 @@ export const experiences = {
   playing: [
     { title: '给我眨个眼', description: '点一下，看看它真的在屏幕上眨眼。',
       command: ['perform', 'face', 'winking'], cancel: ['perform', 'stop'],
-      hardware: 'face', lane: 'preview', face: 'winking',
+      hardware: 'face', lane: 'remote', face: 'winking',
       instruction: '看主机屏幕，它会做一个眨眼动作。' },
     { title: '听它的小曲', description: '叫它选一首喜欢的曲子。声音和眼神会一起回应。',
       hardware: 'voice', lane: 'reply', face: 'beat_swing',

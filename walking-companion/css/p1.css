@@ -51,17 +51,12 @@
 .p1-anatomy figcaption { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #ffffff30; font-size: 13px; }
 .p1-assembly svg { display: block; width: 100%; height: auto; }
 .p1-assembly [data-group] { transition: opacity .3s ease, filter .3s ease; }
-.p1-assembly svg[data-part] [data-group] { opacity: .46; }
-.p1-assembly svg[data-part="face"] [data-group~="face"],
-.p1-assembly svg[data-part="voice"] [data-group~="voice"],
-.p1-assembly svg[data-part="camera"] [data-group~="camera"],
-.p1-assembly svg[data-part="sense"] [data-group~="sense"],
-.p1-assembly svg[data-part="motor"] [data-group~="motor"],
-.p1-assembly svg[data-part="tilt"] [data-group~="tilt"],
-.p1-assembly svg[data-part="altitude"] [data-group~="altitude"] {
-  opacity: 1;
-  filter: brightness(1.33);
-}
+.p1-assembly [data-group] { opacity: .57; }
+.p1-assembly .rig-selected { opacity: 1; filter: brightness(1.24); }
+.p1-assembly .rig-live { opacity: 1; filter: brightness(1.35) drop-shadow(0 0 3px #caee9175); }
+.p1-assembly .rig-live .iso-line { stroke: #d4fb9b; }
+.p1-assembly .rig-live.rig-signal .iso-line { stroke-dasharray: 8 3; animation: p1-signal-flow 1.15s linear infinite; }
+@keyframes p1-signal-flow { to { stroke-dashoffset: -22; } }
 .p1-parts { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px; }
 .p1-parts button { padding: 9px 11px; min-height: 40px; border: 1px solid #ffffff46; color: inherit; }
 .p1-parts button[aria-pressed="true"] { background: #e9edfa; color: #323c52; }
@@ -81,4 +76,98 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .p1-assembly [data-group] { transition: none; }
+  .p1-assembly .rig-live.rig-signal .iso-line { animation: none; }
+}
+
+.experience #experience-close { display: inline-flex; min-height: 44px; align-items: center; }
+.experience .scene-stage { display: none; }
+.experience .hero { width: 35%; }
+.experience .moments {
+  left: 35%;
+  display: grid;
+  grid-template-rows: auto auto minmax(130px, .85fr) minmax(180px, 1.15fr);
+  gap: clamp(8px, 1.3vh, 16px);
+  padding: clamp(14px, 2vw, 34px);
+  overflow: auto;
+  background: linear-gradient(135deg, #858b9f, #777c91);
+  color: #fff;
+}
+.experience.metal-theme .expression-layer {
+  display: grid;
+  grid-template-rows: auto auto minmax(150px, 1fr) minmax(130px, .68fr);
+  gap: clamp(8px, 1.4vh, 16px);
+  padding: clamp(16px, 2.2vw, 36px);
+  color: #fff;
+  background: linear-gradient(155deg, #858da1, #70788e);
+}
+.experience.metal-theme .expression-layer[hidden] { display: none; }
+.experience.metal-theme .hero .p1-identity h1 { position: static; margin: 0; font-size: clamp(27px, 4vw, 59px); font-weight: 610; line-height: 1; letter-spacing: -.05em; }
+.p1-identity h1 span { font: 650 clamp(12px, 1.8vw, 27px)/1 "Segoe UI", sans-serif; letter-spacing: .01em; white-space: nowrap; }
+.p1-identity p { margin: .55em 0 0; color: #f0f2f9; font-size: clamp(13px, 1.65vw, 20px); }
+.p1-toolbar { padding: 0; border: 0; background: transparent; min-height: 44px; }
+.p1-toolbar button { border: 1px solid #e4e8fb64; border-radius: 5px; }
+.p1-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #fff8;
+  border-radius: 8px;
+  background: #b1fb14;
+  container-type: size;
+}
+.p1-face canvas { display: block; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); }
+.p1-face label { position: absolute; bottom: 7px; right: 8px; padding-left: 8px; border-radius: 5px; background: #151a2bdc; color: #fff; font-size: 11px; }
+.p1-face select { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: inherit; font: inherit; }
+.p1-face option { background: #333a4e; }
+.p1-speech { min-height: 0; overflow: auto; border-top: 1px solid #ffffff5e; }
+.p1-speech header, .p1-anatomy figcaption { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.p1-speech header { padding-top: 12px; }
+.p1-speech h2, .p1-graph h2, .p1-anatomy h2 { margin: 0; font: 650 clamp(15px, 1.5vw, 22px)/1.15 "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+.p1-speech-state, .p1-hardware-state { color: #eff3fe; font-size: 11px; white-space: nowrap; }
+.p1-speech dl { margin: 0; }
+.p1-speech dl div { padding: 8px 0; border-bottom: 1px solid #ffffff38; }
+.p1-speech dt { color: #e0e8fa; font-size: 11px; }
+.p1-speech dd { margin: 3px 0 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.experience .moments .scene-tabs { margin: 0; width: 100%; overflow: visible; }
+.experience .scene-tabs button { min-width: 0; flex: 1; font-size: clamp(9px, 1vw, 13px); padding: 0 5px; }
+.experience .scene-tabs button[aria-selected="true"] { background: #ecedf5; color: #384258; }
+.p1-detail { min-height: 46px; }
+.p1-detail h2 { font-size: clamp(17px, 2.2vw, 29px); line-height: 1.12; }
+.p1-description { color: #f1f3fa; font-size: clamp(11px, 1.15vw, 14px); }
+.p1-start { min-width: 78px; border-radius: 5px; }
+.p1-scenes { margin-bottom: 4px; }
+.p1-scenes button { min-height: 44px; border-radius: 5px; }
+.p1-graph, .p1-anatomy {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 9px 10px;
+  border: 1px solid #d7def05c;
+  border-radius: 8px;
+  background: #3c465d;
+}
+.p1-graph { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 7px; }
+.p1-graph-stage { position: relative; min-height: 0; overflow: hidden; border-radius: 5px; }
+.p1-anatomy {
+  display: grid;
+  grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr) clamp(142px, 16vw, 225px);
+  gap: 3px 8px;
+  background: radial-gradient(ellipse at 35% 50%, #59647e, #3a4358 76%);
+}
+.p1-anatomy figcaption { grid-column: 1 / -1; padding: 0 0 5px; border: 0; }
+.p1-assembly { min-height: 0; }
+.p1-assembly svg { width: 100%; height: 100%; }
+.p1-assembly .iso { --anatomy-paper: transparent !important; }
+.p1-parts { align-self: start; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 0; }
+.p1-parts button { min-width: 0; padding: 2px; border-radius: 4px; font-size: clamp(9px, 1.05vw, 13px); line-height: 1.1; }
+.p1-parts button[data-part="motor"] { grid-column: auto; }
+.experience .p1-parts button { min-height: 44px; }
+.p1-part-detail { grid-column: 1 / -1; padding: 4px 0 0; border-top: 1px solid #edf1fa43; }
+.p1-part-detail strong, .p1-part-detail p { font-size: 11px; }
+.p1-part-detail p { margin: 0; color: #e0e6f7; line-height: 1.35; }
+@media (max-height: 720px) {
+  .p1-anatomy { grid-template-columns: minmax(0, 1fr) clamp(180px, 20vw, 286px); }
+  .p1-parts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

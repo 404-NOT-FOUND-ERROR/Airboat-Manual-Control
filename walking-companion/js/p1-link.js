@@ -97,11 +97,17 @@ export class AirBoatLink extends EventTarget {
     return this.queue(async () => {
       if (!this.session) throw new Error(errors.pair);
       const proof = this.proof;
-      const current = this.publish(await this.request(`status ${proof}`));
+      const current = await this.request(`status ${proof}`);
+      if (current.boot !== this.session?.boot) return this.publish(current);
       const sequence = ((current.seq + 1) >>> 0) || 1;
       this.save({ ...this.session, sequence });
-      return this.publish(await this.request(
-        [operation, proof, sequence, current.epoch, current.ticket, ...args].join(' ')));
+      const state = await this.request([operation, proof, sequence, current.epoch, current.ticket, ...args].join(' '));
+      const previous = this.snapshot;
+      if (state.workbench && previous?.boot === state.boot) {
+        state.face = previous.face;
+        state.dialogue = previous.dialogue;
+      }
+      return this.publish(state);
     });
   }
 
@@ -111,13 +117,25 @@ export class AirBoatLink extends EventTarget {
     if (!visible || this.polling || !this.session) return;
     this.polling = true;
     this.queue(async () => {
-      if (this.watching && this.session) this.publish(await this.request(`status ${this.proof}`));
+      if (!this.watching || !this.session) return;
+      const proof = this.proof;
+      const state = await this.request(`status ${proof}`);
+      if (state.workbench && state.boot === this.session?.boot) {
+        try {
+          const { face, dialogue } = await this.request(`workbench ${proof}`);
+          state.face = face;
+          state.dialogue = dialogue;
+        } catch (error) {
+          if (!this.session) throw error;
+        }
+      }
+      if (this.watching) this.publish(state);
     }).catch(error => {
       this.dispatchEvent(new CustomEvent('unavailable', { detail: error.message }));
     }).finally(() => {
       this.polling = false;
       if (this.watching && this.session) {
-        this.timer = setTimeout(() => this.watch(true), this.snapshot?.face ? 200 : 350);
+        this.timer = setTimeout(() => this.watch(true), this.snapshot?.workbench ? 160 : 350);
       }
     });
   }

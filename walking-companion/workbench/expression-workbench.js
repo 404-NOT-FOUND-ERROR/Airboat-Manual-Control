@@ -24,6 +24,7 @@
     ["safety","安全限制 / 受惊","安全回应","急停、姿态数据过期、限制状态或受惊可使用受惊语义。",["shocked"],"100"],
     ["preview","表情菜单","本机预览","选择后回首页预览，轻触按当前状态取消。菜单里的「惊喜」用受惊语义。",["idle","happy","shocked","listening","sleepy","thinking"],"50"],
     ["walk","伙伴进入 walking","散步回应","walking 状态用放松语义，该状态的身体候选独立编排。",["relaxed"],"20"],
+    ["remote","平板发起表情","远程表情","配对后由主机确认当前页面和设备状态，再播放相应表情。",["winking"],"90"],
   ];
   const typeLabel = {trigger:"触发场景",recipe:"回应编排",semantic:"表情语义",asset:"动画素材"};
   const columns = [["trigger","场景触发","◈",16,175],["recipe","回应编排","◇",245,168],
@@ -239,8 +240,9 @@
     let state = Eaf.previewAt(active,base,elapsed,active.previewMode);
     if (devicePose) {
       const fps = devicePose.fps || active.fps || 25;
-      let frame = devicePose.frame + Math.floor((performance.now() - devicePose.receivedAt) * fps / 1000);
-      if (active.segments && active.loop && frame >= active.segments.performance[0]) {
+      let frame = devicePose.frame + (devicePose.playing ? Math.floor((performance.now() - devicePose.receivedAt) * fps / 1000) : 0);
+      if (active.segments && (devicePose.loop ?? active.loop) && devicePose.playing &&
+          devicePose.frame < active.segments.performance[1] && frame >= active.segments.performance[0]) {
         const [start,end] = active.segments.performance;
         frame = start + (frame - start) % (end - start);
       } else {
@@ -257,7 +259,9 @@
     document.querySelectorAll("[data-clip-stage]").forEach(b => b.classList.toggle("active",b.dataset.clipStage === state.phase));
     const overlayCount = active.overlay ? data.assets[active.overlay].frames : 0;
     const layer = overlayCount ? (devicePose ? devicePose.listen_frame + Math.floor((performance.now()-devicePose.receivedAt)*15/1000) : Math.floor(elapsed*15/1000))%overlayCount : -1;
-    const mirror = devicePose ? devicePose.mirror ? "on" : "off" : $("mirror").value, next = `${frame}/${layer}/${mirror}`;
+    const mirrorMode = $("mirror").value;
+    const mirror = devicePose && mirrorMode === "device" ? (devicePose.mirror ? "on" : "off") : mirrorMode;
+    const next = `${frame}/${layer}/${mirror}`;
     if (stamp === next) return;
     stamp = next;
     Eaf.draw(ctx,decoder(active.file).frame(frame),active,mirror);
@@ -265,6 +269,7 @@
       const overlay = decoder(active.overlay).frame(layer), s = canvas.width/360;
       ctx.drawImage(overlay,130*s,25*s,overlay.width*s,overlay.height*s);
     }
+    dispatchEvent(new Event("airboat:face-frame"));
     $("frames").value = overlayCount && !active.loop ? layer : frame;
     $("frame-number").value = `${Number($("frames").value)+1}/${Number($("frames").max)+1}`;
   }
@@ -327,6 +332,16 @@
   }
   function focusRoute(lane, semantic) {
     if (!viewport.clientWidth || !viewport.clientHeight) return;
+    if (document.body.classList.contains("p1-graph-only")) {
+      const emotion = nodes.get(id("semantic",semantic));
+      if (emotion) {
+        scale = Math.min(1.12, Math.max(.65, viewport.clientWidth / 590));
+        x = viewport.clientWidth * .54 - (emotion.x + emotion.w / 2) * scale;
+        y = viewport.clientHeight * .53 - (emotion.y + 26) * scale;
+        apply(!reduced);
+        return;
+      }
+    }
     if (viewport.clientWidth < 550) viewport.closest(".board")?.classList.add("focused-route");
     const recipe = nodes.get(id("recipe",lane));
     const trigger = nodes.get(id("trigger",lane));
@@ -371,7 +386,8 @@
     if (!next) return;
     if (detail.type === "live") {
       const face = detail.face;
-      if (!Number.isInteger(face.frame) || face.frame < 0 || face.frame >= data.assets[next.file].frames) return;
+      if (!Number.isInteger(face.frame) || face.frame < 0 || face.frame >= data.assets[next.file].frames ||
+          (next.overlay && !Number.isInteger(face.listen_frame))) return;
       devicePose = {...face,receivedAt:performance.now()};
       if (selected !== key || active.semantic !== next.semantic) select(key);
       playing = false;

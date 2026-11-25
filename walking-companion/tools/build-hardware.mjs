@@ -9,7 +9,7 @@ const [k, g, a] = await Promise.all([load('iso-kit'), load('lathe'), load('audit
 const plan = (x, y, w, d, r = 0) => ({ x, y, w, d, r });
 const deck = plan(0, 0, 226, 142, 5);
 const width = 700, height = 410;
-const P = k.fitProjection(k.boxCorners(deck, -10, 69), width, height, { pad: 29, azimuth: 42, elevation: 36 });
+const P = k.fitProjection(k.boxCorners(deck, -10, 22), width, height, { pad: 16, azimuth: 42, elevation: 36 });
 const R = a.recorder(P, { ground: s => s.name.startsWith('bench.foot') });
 const at = point => k.iso(point, P);
 const trace = [];
@@ -51,7 +51,7 @@ for (const [index,[x,y]] of k.corners(deck,9).entries()) {
   disk('bench.screw.'+index,'bench',x,y,0,2.1,.8,'hi');
 }
 
-const head = 'face voice camera sense tilt';
+const head = 'face voice camera sense tilt motor';
 box('head.support','tilt',59,45,67,47,0,4,3);
 box('head.shell',head,60,46,65,45,4,13,5);
 box('head.bezel','face voice sense',63,49,59,39,17,2.6,4,'hi');
@@ -60,7 +60,7 @@ for (const [index,x] of [82,103].entries()) {
   box('face.eye.'+index,'face',x-6,61,12,13,20.5,.4,5,'hi');
   disk('face.pupil.'+index,'face',x+2,65,20.9,2.4,.35,'lo');
 }
-box('head.h1','motor tilt altitude',125,54,8,24,4,6,1,'hi');
+box('head.h1','motor drive m1 m2 m3 tilt altitude',125,54,8,24,4,6,1,'hi');
 box('head.h2','camera',50,56,10,19,4,6,1,'hi');
 for (let i=0;i<5;i++) stripe('head.speaker.'+i,'voice',65+i*4,85,2.7,1.3,17);
 disk('head.mic','voice',118,86,17,1.3,.4,'hi');
@@ -76,44 +76,51 @@ signal('camera ribbon','camera',[[48,67,10],[50,67,10]]);
 
 for (const [index,y] of [57,84].entries()) {
   const name = 'driver.'+index;
-  box(name+'.pcb','motor',149,y,27,17,0,2,1,'hi');
-  box(name+'.ic','motor',157,y+4,10,8,2,2,1);
+  const group = index === 0 ? 'motor m1 m2' : 'motor m3';
+  box(name+'.pcb',group,149,y,27,17,0,2,1,'hi');
+  box(name+'.ic',group,157,y+4,10,8,2,2,1);
   for (let i=0;i<4;i++) {
-    stripe(name+'.left-pin.'+i,'motor',151+i*5,y+1,3,1.4,2);
-    stripe(name+'.right-pin.'+i,'motor',151+i*5,y+14,3,1.4,2);
+    stripe(name+'.left-pin.'+i,group,151+i*5,y+1,3,1.4,2);
+    stripe(name+'.right-pin.'+i,group,151+i*5,y+14,3,1.4,2);
   }
 }
-signal('H1 PWM','motor',[[133,60,10],[141,60,10],[149,61,2]]);
-signal('H1 PWM second driver','motor',[[133,73,10],[140,77,10],[149,85,2]]);
+signal('H1 PWM to D1','motor m1 m2',[[133,60,10],[141,60,10],[149,61,2]]);
+signal('H1 PWM to D2','motor m3',[[133,73,10],[140,77,10],[149,85,2]]);
 
 for (const [index,y] of [25,65,104].entries()) {
   const name = 'motor.'+(index+1), x = 198;
-  box(name+'.clamp','motor',x-11,y-8,22,16,0,4,2);
-  disk(name+'.can','motor',x,y,4,7,11,'hi');
-  disk(name+'.bearing','motor',x,y,15,3.7,2);
-  disk(name+'.hub','motor',x,y,17,2,.8,'hi');
+  const group = `motor m${index+1}`;
+  box(name+'.clamp',group,x-11,y-8,22,16,0,4,2);
+  disk(name+'.can',group,x,y,4,7,11,'hi');
+  disk(name+'.bearing',group,x,y,15,3.7,2);
+  disk(name+'.hub',group,x,y,17,2,.8,'hi');
+  for (const [side,offset] of [-8,8].entries()) {
+    disk(name+'.screw.'+side,group,x+offset,y+4.5,4,1.2,.6,'hi');
+  }
   for (let blade=0;blade<3;blade++) {
     const angle = blade * Math.PI * 2 / 3;
     const rim = [[2,-1.4],[13,-4],[15,-1.8],[12,2.2],[2,1.7]].map(([u,v]) =>
       [x+u*Math.cos(angle)-v*Math.sin(angle),y+u*Math.sin(angle)+v*Math.cos(angle)]);
     const bladeName = name+'.blade.'+blade;
-    solid(bladeName,'motor',[x+Math.cos(angle)*7,y+Math.sin(angle)*7,17.4],
+    solid(bladeName,group,[x+Math.cos(angle)*7,y+Math.sin(angle)*7,17.4],
       a.extruded(rim,17,.8,{name:bladeName}), k.extrude(rim,17,.8,P,{convex:true}),'hi');
   }
-  disk(name+'.pin','motor',x,y,17.8,1.25,1.6,'hi');
+  disk(name+'.pin',group,x,y,17.8,1.25,1.6,'hi');
   label('M'+(index+1),185,y+19,.2,5);
 }
-signal('M1 leads','motor',[[176,60,2],[183,56,2],[186,32,2],[187,25,4]]);
-signal('M2 leads','motor',[[176,66,2],[184,66,2],[187,65,4]]);
-signal('M3 leads','motor',[[176,92,2],[182,94,2],[187,104,4]]);
+signal('D1 AO1/AO2 to M1','motor m1',[[176,60,2],[183,56,2],[186,32,2],[187,25,4]]);
+signal('D1 BO1/BO2 to M2','motor m2',[[176,66,2],[184,66,2],[187,65,4]]);
+signal('D2 AO1/AO2 to M3','motor m3',[[176,92,2],[182,94,2],[187,104,4]]);
 
-box('battery.cage','motor',145,13,35,27,0,2,3);
-box('battery.1s','motor',147,15,31,23,2,6,3,'hi');
-box('battery.plug','motor',157,43,10,6,0,5,1,'hi');
-stripe('battery.strap.1','motor',151,15,3,23,8);
-stripe('battery.strap.2','motor',172,15,3,23,8);
-signal('battery lead','motor',[[162,43,5],[162,47,5],[162,50,4]]);
-signal('motor battery feed','motor',[[162,50,4],[155,53,3],[149,57,2]]);
+const power = 'motor drive m1 m2 m3';
+box('battery.cage',power,145,13,35,27,0,2,3);
+box('battery.1s',power,147,15,31,23,2,6,3,'hi');
+box('battery.plug',power,157,43,10,6,0,5,1,'hi');
+stripe('battery.strap.1',power,151,15,3,23,8);
+stripe('battery.strap.2',power,172,15,3,23,8);
+signal('battery lead',power,[[162,43,5],[162,47,5],[162,50,4]]);
+signal('1S to D1','motor m1 m2',[[162,50,4],[155,53,3],[149,57,2]]);
+signal('1S to D2','motor m3',[[162,50,4],[145,53,3],[145,80,2],[149,84,2]]);
 
 box('pca.board','tilt',66,110,36,17,0,2,1,'hi');
 box('pca.ic','tilt',80,115,11,7,2,2,1);

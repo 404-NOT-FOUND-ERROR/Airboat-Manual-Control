@@ -7,19 +7,43 @@ const hardware = {
   voice: ['对话', '板载麦克风 → 小智 → 板载扬声器', '唤醒和采音在主机完成，语音问答走 Wi-Fi。计时保存在主机。'],
   camera: ['相机', 'H2 相机 → Mosaico JPEG → 手机', '相机直插左侧 H2。主机抓拍后，手机通过局域网领取 JPEG。'],
   sense: ['姿态', '板载 BMI270 → 晃动与放稳 → 安抚', '加速度和角速度用于判定晃动与放稳。'],
-  motor: ['动力', 'H1 六路 PWM → 两块 DRV8833 → 三台电机', 'M1 转向、M2 升降、M3 前后。推进使用独立 1S 电源。'],
+  motor: ['三路推进', 'H1 六路 PWM → 两块 DRV8833 → 三台电机', '推进由独立 1S 电池供电，各路输出来自设备回报。'],
+  m1: ['M1 转向', 'H1 → D1 / AO1–AO2 → M1 桨', '正向使艇头向左。'],
+  m2: ['M2 升降', 'H1 → D1 / BO1–BO2 → M2 桨', '正向上升。'],
+  m3: ['M3 前后', 'H1 → D2 / AO1–AO2 → M3 桨', '正向前进。'],
   tilt: ['俯仰', 'H1 I²C → PCA9685 → SG90', 'PCA9685 提供舵机信号。活动头部与飞控联动待验。'],
   altitude: ['气压', 'H1 I²C → BMP581 → 相对高度', '气压模块已通过读取检查。定高控制待验。'],
 };
 
-export function mountP1({ drawer, panel, frame, notify, developerMode, manager }) {
+export function mountP1({ drawer, panel, graph, frame, notify, developerMode, manager }) {
   const link = new AirBoatLink();
   let selected, running, online = false, lastFace, photoURL;
   let pendingStart;
   let bridge;
   let workbenchReady = false;
+  panel.innerHTML = `
+    <header class="p1-identity"><h1>悠米 <span>UNION NO.1</span></h1><p>代号小酥肉</p></header>
+    <div class="p1-face">
+      <canvas width="480" height="480" role="img" aria-label="悠米实时表情"></canvas>
+      <label>镜像 <select aria-label="表情镜像"><option value="device">随设备</option>
+        <option value="off">关闭</option><option value="on">开启</option></select></label>
+    </div>
+    <section class="p1-speech" aria-labelledby="p1-speech-title">
+      <header><h2 id="p1-speech-title">语音对话</h2><span class="p1-speech-state">等待连接</span></header>
+      <dl><div><dt>你说</dt><dd data-speech="input">—</dd></div>
+        <div><dt>小酥肉说</dt><dd data-speech="output">—</dd></div></dl>
+    </section>`;
+  const faceStage = panel.querySelector('.p1-face');
+  const faceContext = faceStage.querySelector('canvas').getContext('2d');
+  const mirror = faceStage.querySelector('select');
+  const speechStatus = panel.querySelector('.p1-speech-state');
+  const speechInput = panel.querySelector('[data-speech="input"]');
+  const speechOutput = panel.querySelector('[data-speech="output"]');
+  mirror.addEventListener('change', () => notify('mirror', { mode: mirror.value }));
   const scene = document.createElement('section');
   scene.className = 'p1-scene';
+  scene.id = 'p1-scene';
+  scene.setAttribute('role', 'tabpanel');
   scene.innerHTML = `
     <div class="p1-scenes" aria-label="场景功能"></div>
     <div class="p1-detail">
@@ -28,7 +52,9 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
     </div>
     <p class="p1-feedback" role="status"></p>
     <div class="p1-photo" hidden><button type="button">领取照片</button><a hidden download>保存照片 ↓</a></div>`;
-  drawer.querySelector('.scene-tabs').after(scene);
+  const tabs = drawer.querySelector('.scene-tabs');
+  for (const tab of tabs.children) tab.setAttribute('aria-controls', scene.id);
+  tabs.after(scene);
   const choose = scene.querySelector('.p1-scenes');
   const play = scene.querySelector('.p1-start');
   const feedback = scene.querySelector('.p1-feedback');
@@ -37,9 +63,8 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
   toolbar.className = 'p1-toolbar';
   toolbar.innerHTML = `
     <span class="p1-source"><i></i><span>场景预览</span></span>
-    <div><button type="button" class="p1-connect">连接主机</button>
-    <button type="button" class="p1-hardware">硬件链路 ↗</button></div>`;
-  panel.prepend(toolbar);
+    <div><button type="button" class="p1-connect">连接主机</button></div>`;
+  panel.querySelector('.p1-identity').after(toolbar);
   const status = toolbar.querySelector('.p1-source span');
   const connect = toolbar.querySelector('.p1-connect');
   const pairing = makeDialog('连接 Mosaico', `
@@ -56,16 +81,24 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
       <button type="button" class="p1-dev-connect">连接 Mosaico</button>
     </div>
     <p class="p1-dev-info" role="status"></p>`);
-  const anatomy = makeDialog('硬件链路', `
-    <figure class="p1-anatomy">
-      <figcaption><span>FIG. 01</span><span>Mosaico 托架与外设</span></figcaption>
+  const anatomy = document.createElement('figure');
+  anatomy.className = 'p1-anatomy';
+  anatomy.innerHTML = `
+      <figcaption><h2>硬件链路</h2><span class="p1-hardware-state">场景路径</span></figcaption>
       <div class="p1-assembly" aria-label="Mosaico 外设装配示意"></div>
       <div class="p1-parts" aria-label="硬件支路"></div>
-      <div class="p1-part-detail"><strong></strong><p></p></div>
-    </figure>`);
+      <div class="p1-part-detail"><strong></strong><p></p></div>`;
+  drawer.append(graph, anatomy);
   const parts = anatomy.querySelector('.p1-parts');
+  const hardwareStatus = anatomy.querySelector('.p1-hardware-state');
+  const partChain = anatomy.querySelector('.p1-part-detail strong');
+  const partDescription = anatomy.querySelector('.p1-part-detail p');
   let hardwareKey = 'voice';
   let diagram;
+  let loadingDiagram;
+  let liveMotors = [];
+  let activeHardware;
+  let background = '';
   for (const [key, [label]] of Object.entries(hardware)) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -78,15 +111,26 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
     hardwareKey = key;
     for (const button of parts.children) button.setAttribute('aria-pressed', String(button.dataset.part === key));
     const [, chain, detail] = hardware[key];
-    anatomy.querySelector('.p1-part-detail strong').textContent = chain;
-    anatomy.querySelector('.p1-part-detail p').textContent = detail;
-    if (diagram) diagram.dataset.part = key;
+    partChain.textContent = chain;
+    partDescription.textContent = detail;
+    updateHardware();
   }
 
-  toolbar.querySelector('.p1-hardware').addEventListener('click', async () => {
-    anatomy.showModal();
-    showHardware(selected.hardware);
-    if (diagram) return;
+  function updateHardware(active = activeHardware) {
+    activeHardware = active;
+    const output = /^m[123]$/.test(hardwareKey) ? liveMotors[Number(hardwareKey[1]) - 1] : undefined;
+    hardwareStatus.textContent = Number.isFinite(output) ? `设备输出 ${output / 10}%` :
+      active ? '设备状态' : '场景路径';
+    if (!diagram) return;
+    const liveKeys = [active, ...liveMotors.map((value, index) => value ? `m${index + 1}` : '')];
+    for (const element of diagram.querySelectorAll('[data-group]')) {
+      const groups = element.dataset.group.split(' ');
+      element.classList.toggle('rig-selected', groups.includes(hardwareKey));
+      element.classList.toggle('rig-live', liveKeys.some(key => key && groups.includes(key)));
+    }
+  }
+
+  async function loadDiagram() {
     const stage = anatomy.querySelector('.p1-assembly');
     try {
       const response = await fetch('assets/hardware/airboat-rig.svg');
@@ -95,11 +139,32 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
       if (svg.localName !== 'svg') throw new Error();
       diagram = document.importNode(svg, true);
       stage.replaceChildren(diagram);
-      showHardware(hardwareKey);
+      updateHardware();
     } catch {
       stage.textContent = '装配图暂时无法加载。';
+      loadingDiagram = null;
     }
-  });
+  }
+
+  function updateSpeech(dialogue, connected) {
+    const input = typeof dialogue?.input === 'string' ? dialogue.input : '';
+    const output = typeof dialogue?.output === 'string' ? dialogue.output : '';
+    const label = ({ listening: '聆听中', thinking: '思考中', speaking: '回应中', idle: '待机' })[dialogue?.phase];
+    speechStatus.textContent = dialogue ? label || '等待本轮对话' : connected ? '等待设备回传' : '等待连接';
+    if (speechInput.textContent !== (input || '—')) speechInput.textContent = input || '—';
+    if (speechOutput.textContent !== (output || '—')) speechOutput.textContent = output || '—';
+  }
+
+  function copyFace() {
+    const source = frame.contentDocument?.querySelector('#face');
+    if (!source || !isVisible()) return;
+    faceContext.drawImage(source, 0, 0);
+    const next = source.closest('.screen').style.backgroundColor;
+    if (next && next !== background) {
+      background = next;
+      faceStage.style.backgroundColor = next;
+    }
+  }
 
   async function integration() {
     if (!bridge) bridge = fetch('/device-config', { cache: 'no-store' })
@@ -146,6 +211,9 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
       button.disabled = false;
     }
   });
+  pairing.addEventListener('close', () => {
+    if (!link.session) pendingStart = null;
+  });
 
   function isVisible() {
     return document.body.classList.contains('experience') && !document.hidden;
@@ -167,7 +235,7 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
     refresh();
     if (lastFace) notify('focus', { lane: liveLane(lastFace.semantic) || experience.lane, semantic: lastFace.semantic });
     else preview();
-    if (anatomy.open) showHardware(experience.hardware);
+    showHardware(experience.hardware);
   }
   function pickScene(current) {
     const options = experiences[current.id];
@@ -179,6 +247,7 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
       return button;
     }));
     choose.hidden = options.length < 2;
+    scene.setAttribute('aria-labelledby', `tab-${current.id}`);
     select(options[0]);
   }
   function connectionLabel(text, live = false) {
@@ -199,6 +268,7 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
         if (experience.command) await link.command(experience.command);
         running = experience;
         feedback.textContent = experience.instruction;
+        showHardware(experience.hardware);
         if (lastFace) notify('focus', { lane: experience.lane, semantic: lastFace.semantic });
         else preview();
       }
@@ -214,9 +284,20 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
     const next = pendingStart;
     pendingStart = null;
     const face = detail.face;
-    const valid = face?.catalog === catalog && face.active && typeof face.semantic === 'string';
+    liveMotors = Array.isArray(detail.motors) ? detail.motors.slice(0, 3).map(value =>
+      !detail.simulated && Number.isFinite(value) ? value : undefined) : [];
+    updateSpeech(detail.dialogue, true);
+    const voicePhase = detail.dialogue?.phase;
+    const liveHardware = liveMotors.some(Boolean) ? 'drive' :
+      detail.performance?.head_busy ? 'tilt' :
+      ['speaking', 'listening', 'thinking'].includes(voicePhase) ? 'voice' :
+      face?.active ? 'face' : null;
+    updateHardware(liveHardware);
+    const valid = face?.catalog === catalog && face.active && typeof face.semantic === 'string' &&
+      Number.isInteger(face.frame) && Number.isInteger(face.frames) && face.frame >= 0 && face.frame < face.frames;
     if (valid) {
-      const focus = !lastFace || face.semantic !== lastFace.semantic || face.generation !== lastFace.generation;
+      const focus = !lastFace || face.semantic !== lastFace.semantic || face.generation !== lastFace.generation ||
+        face.listening !== lastFace.listening;
       lastFace = face;
       if (workbenchReady) notify('live', { face, lane: liveLane(face.semantic) || selected.lane, focus });
       connectionLabel('实机同步', true);
@@ -237,6 +318,9 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
     lastFace = null;
     notify('stop-live');
     connectionLabel('连接中断');
+    updateSpeech(null, false);
+    liveMotors = [];
+    updateHardware(null);
     feedback.textContent = detail;
     refresh();
   });
@@ -276,9 +360,20 @@ export function mountP1({ drawer, panel, frame, notify, developerMode, manager }
   addEventListener('message', event => {
     if (event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== 'ready') return;
     workbenchReady = true;
-    preview();
+    frame.contentWindow.addEventListener('airboat:face-frame', copyFace);
+    notify('mirror', { mode: mirror.value });
+    if (lastFace) notify('live', { face: lastFace, lane: liveLane(lastFace.semantic) || selected.lane, focus: true });
+    else preview();
+    copyFace();
   });
-  const visible = () => link.watch(isVisible());
+  const visible = () => {
+    const open = isVisible();
+    link.watch(open);
+    if (open) {
+      if (!diagram && !loadingDiagram) loadingDiagram = loadDiagram();
+      copyFace();
+    }
+  };
   document.addEventListener('visibilitychange', visible);
   pickScene(manager.current);
   return { visible };

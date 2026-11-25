@@ -85,3 +85,12 @@ body.face-above-board{grid-template-rows:48px clamp(175px,34dvh,320px) minmax(0,
 .face-above-board .toolbar{display:none}
 .face-above-board .board{grid-template-rows:minmax(0,1fr) auto}
 @media(max-height:499px){body.face-above-board{grid-template-rows:38px clamp(95px,35dvh,140px) minmax(0,1fr)}.face-above-board>.masthead{height:38px}}
+body.face-above-board.p1-graph-only { display: block; }
+.face-above-board.p1-graph-only > .screen, .face-above-board.p1-graph-only > .masthead { display: none; }
+.face-above-board.p1-graph-only .studio { height: 100dvh; }
+.face-above-board.p1-graph-only .viewport {
+  background-color: #56617a;
+  background-image: radial-gradient(#e5ecff38 .75px, transparent 1px);
+}
+.face-above-board.p1-graph-only .board-footer { min-height: 40px; padding: 2px 8px; background: #48536c; }
+.p1-graph-only .zoom-tools button { min-width: 38px; min-height: 36px; }

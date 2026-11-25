@@ -7,6 +7,8 @@ addEventListener('DOMContentLoaded',()=>{
   screen.setAttribute('aria-label','实时表情预览');
   $('.masthead').after(screen);
   const face=$('#face');
+  const graphOnly=parent!==window&&new URLSearchParams(location.search).get('view')==='p1-graph';
+  if(graphOnly)document.body.classList.add('p1-graph-only');
   const fitFace=()=>screen.style.setProperty('--face-size',Math.max(1,Math.min(screen.clientWidth*.94,screen.clientHeight*.94))+'px');
   new ResizeObserver(fitFace).observe(screen);
   fitFace();
@@ -32,6 +34,11 @@ addEventListener('DOMContentLoaded',()=>{
       const play=$('#play');
       if(!e.data.visible){resume=play.getAttribute('aria-label')==='暂停';if(resume)play.click();if($('#compare').open)$('#compare-close').click();}
       else if(resume){play.click();resume=false;}
+    }
+    if(e.data.type==='mirror'){
+      const mirror=$('#mirror');
+      mirror.value=e.data.mode;
+      mirror.dispatchEvent(new Event('change'));
     }
     if(['preview','live','focus','stop-live'].includes(e.data.type)){
       const {type,face,lane,focus}=e.data;
