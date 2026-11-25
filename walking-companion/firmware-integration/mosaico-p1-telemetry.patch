@@ -2,17 +2,11 @@ diff --git a/components/app_airboat_ui/app_airboat_ui.c b/components/app_airboat
 index 497a65c..b60acde 100644
 --- a/components/app_airboat_ui/app_airboat_ui.c
 +++ b/components/app_airboat_ui/app_airboat_ui.c
-@@ -80,6 +80,7 @@ struct app_airboat_ui {
-     const char *settings_hint;
-     bool audio_open;
+@@ -82,2 +82,3 @@ struct app_airboat_ui {
      app_expression_player_snapshot_t face_snapshot;
 +    app_remote_workbench_t workbench;
      const char *pending_emote;
-     bool pending_listen;
-     bool home_open;
-@@ -566,6 +567,39 @@ static void airboat_tick(esp_gsp_handle_t ui, void *ctx)
-     }
-     remember_error(state, app_expression_view_tick(state->face, app_airboat_clock_now_ms()));
+@@ -568,2 +569,35 @@ static void airboat_tick(esp_gsp_handle_t ui, void *ctx)
      app_expression_view_read(state->face, &state->face_snapshot);
 +    app_remote_workbench_t *workbench = &state->workbench;
 +    const app_expression_player_snapshot_t *face = &state->face_snapshot;
@@ -48,36 +42,26 @@ index 497a65c..b60acde 100644
 +    strcpy(workbench->phase, voice_phase);
 +    app_remote_publish_workbench(state->remote.service, workbench);
      /* Idle expressions speak for themselves; show only active conversation state. */
-     const char *caption = "";
-     if (state->device.music) caption="音乐播放中 · 点一下停止";
 diff --git a/components/app_companion_assets/include/app_companion_assets.h b/components/app_companion_assets/include/app_companion_assets.h
 index 22cab45..3598672 100644
 --- a/components/app_companion_assets/include/app_companion_assets.h
 +++ b/components/app_companion_assets/include/app_companion_assets.h
-@@ -30,3 +30,4 @@ const app_companion_emote_t *app_companion_assets_find(const char *name);
- const app_companion_asset_t *app_companion_assets_listen(void);
- size_t app_companion_assets_count(void);
+@@ -32 +32,2 @@ size_t app_companion_assets_count(void);
  const app_companion_emote_t *app_companion_assets_at(size_t index);
 +const char *app_companion_catalog_sha256(void);
 diff --git a/components/app_companion_assets/tools/embed_square.py b/components/app_companion_assets/tools/embed_square.py
 index 656984b..2c1155c 100644
 --- a/components/app_companion_assets/tools/embed_square.py
 +++ b/components/app_companion_assets/tools/embed_square.py
-@@ -71,6 +71,7 @@ def generate(root: Path, output: Path):
-         out.append(f'static const app_face_clip_t clip_{key} = {{ {key}_entry,{key}_body,{key}_exit,{c["body_frames"]},19,0x{c["color"][1:]}U }};')
-     out.append('static const app_face_pack_t pack = {square_data,sizeof(square_data),sprites,sizeof(sprites)/sizeof(sprites[0]),0x28cf60U};')
+@@ -73,2 +73,3 @@ def generate(root: Path, output: Path):
      out.append('const app_face_pack_t *app_companion_face_pack(void) { return &pack; }')
 +    out.append(f'const char *app_companion_catalog_sha256(void) {{ return "{EXPECTED}"; }}')
      out.append('static const app_companion_asset_t square_asset = {square_data,sizeof(square_data),"square-pop.afm"};')
-     # Preserve event semantics/once-vs-loop policy. Only the visual source is aliased.
-     catalog=json.loads((root/'assets/emote.json').read_text(encoding='utf-8'))
 diff --git a/components/app_remote/host/test_protocol.c b/components/app_remote/host/test_protocol.c
 index ae70b95..c9667dc 100644
 --- a/components/app_remote/host/test_protocol.c
 +++ b/components/app_remote/host/test_protocol.c
-@@ -46,6 +46,28 @@ static int radio_request(struct app_remote *s, const char *op, const char *args)
- int main(void)
- {
+@@ -48,2 +48,24 @@ int main(void)
      struct app_remote s;
 +    init(&s,0);
 +    s.workbench.catalog = "sample";
@@ -102,15 +86,11 @@ index ae70b95..c9667dc 100644
 +    assert(strlen(response) < sizeof(response) && strcmp(response+strlen(response)-3U,"\"}}")==0);
 +    puts("remote: authenticated workbench snapshot, JSON escaping and bounded response passed");
      init(&s,100);remote_core_tick(&s,120099);assert(s.desired);
-     remote_core_tick(&s,120100);assert(!s.desired&&s.view.timed_out);puts("remote: exact unpaired 120s expiration passed");
-     init(&s,UINT32_MAX-20U);assert(pair(&s,UINT32_MAX-20U)==200);
 diff --git a/components/app_remote/include/app_remote.h b/components/app_remote/include/app_remote.h
 index fcb1b67..d567dc7 100644
 --- a/components/app_remote/include/app_remote.h
 +++ b/components/app_remote/include/app_remote.h
-@@ -38,6 +38,16 @@ void app_remote_publish_experience(app_remote_handle_t handle, const app_experie
- /** Authenticated bounded mailbox; single GSP consumer. Stop replaces queued work. */
- bool app_remote_take_performance(app_remote_handle_t handle, app_remote_performance_request_t *out);
+@@ -40,2 +40,12 @@ bool app_remote_take_performance(app_remote_handle_t handle, app_remote_performa
  void app_remote_publish_performance(app_remote_handle_t handle, const app_remote_performance_snapshot_t *snapshot);
 +typedef struct {
 +    const char *catalog, *semantic; /* Immutable application-lifetime strings. */
@@ -123,36 +103,24 @@ index fcb1b67..d567dc7 100644
 +/** UI owner publishes a read-only snapshot for authenticated workbench requests. */
 +void app_remote_publish_workbench(app_remote_handle_t handle, const app_remote_workbench_t *snapshot);
  /** Quiesce UI callers first; timeout retains the handle/resources for retry. */
- app_remote_result_t app_remote_destroy(app_remote_handle_t *handle);
- 
 diff --git a/components/app_remote/private/remote_internal.h b/components/app_remote/private/remote_internal.h
 index 75c137f..7a00149 100644
 --- a/components/app_remote/private/remote_internal.h
 +++ b/components/app_remote/private/remote_internal.h
-@@ -46,6 +46,7 @@ struct app_remote {
-     uint32_t experience_sequence; /* Boot lifetime, independent of phone re-pair. */
-     app_remote_performance_request_t performance_request;
+@@ -48,2 +48,3 @@ struct app_remote {
      app_remote_performance_snapshot_t performance;
 +    app_remote_workbench_t workbench;
      uint32_t performance_sequence;
-     bool performance_pending;
-     uint8_t *photo;
 diff --git a/components/app_remote/remote_protocol.c b/components/app_remote/remote_protocol.c
 index e5ace2f..5e724a7 100644
 --- a/components/app_remote/remote_protocol.c
 +++ b/components/app_remote/remote_protocol.c
-@@ -194,7 +194,7 @@ void remote_core_status(struct app_remote *s, char *response, size_t capacity,
-         "\"experience\":{\"phase\":%u,\"epoch\":%lu,\"remaining_ms\":%lu,\"turn\":%lu},"
-         "\"performance\":{\"seq\":%lu,\"result\":%u,\"available\":%s,\"prepared\":%s,\"active\":%s},"
+@@ -196,3 +196,3 @@ void remote_core_status(struct app_remote *s, char *response, size_t capacity,
          "\"photo\":{\"id\":%lu,\"bytes\":%lu,\"crc\":%lu,\"activity\":%lu},"
 -        "\"journal\":{\"pending\":%lu,\"active\":%lu,\"elapsed_ms\":%lu}}",
 +        "\"journal\":{\"pending\":%lu,\"active\":%lu,\"elapsed_ms\":%lu},\"workbench\":true}",
          error, phase, s->boot, include_token ? s->token : "",
-         (unsigned long)s->motor.epoch, (unsigned long)s->sequence, (unsigned long)s->ticket,
-         s->ready ? "true" : "false", s->view.applied[0], s->view.applied[1], s->view.applied[2],
-@@ -228,6 +228,60 @@ static int reply(struct app_remote *s, char *out, size_t size, int code, const c
-     return code;
- }
+@@ -230,2 +230,56 @@ static int reply(struct app_remote *s, char *out, size_t size, int code, const c
  
 +static size_t workbench_text(char *out, size_t limit, const char *text, size_t bytes)
 +{
@@ -209,24 +177,16 @@ index e5ace2f..5e724a7 100644
 +}
 +
  static int request_frame(struct app_remote *s, const char *body, size_t bytes,
-     char *response, size_t capacity, uint32_t now, bool stream)
- {
-@@ -256,6 +310,8 @@ static int request_frame(struct app_remote *s, const char *body, size_t bytes,
-         return reply(s, response, capacity, 200, "", now, true);
-     }
+@@ -258,2 +312,4 @@ static int request_frame(struct app_remote *s, const char *body, size_t bytes,
      if (!session_matches(s,&c)) return reply(s, response, capacity, 403, "pair", now, false);
 +    if (!stream && equal(op, "workbench") && done(c))
 +        return workbench_snapshot(s, response, capacity);
      if (equal(op, "resume") && done(c)) {
-         remote_core_suspend(s);
-         s->last_contact = now;
 diff --git a/components/app_remote/remote_service.c b/components/app_remote/remote_service.c
 index ca650ad..c622425 100644
 --- a/components/app_remote/remote_service.c
 +++ b/components/app_remote/remote_service.c
-@@ -148,6 +148,14 @@ void app_remote_publish_performance(app_remote_handle_t s, const app_remote_perf
-     remote_os_lock(s->os); s->performance=*snapshot; remote_os_unlock(s->os);
- }
+@@ -150,2 +150,10 @@ void app_remote_publish_performance(app_remote_handle_t s, const app_remote_perf
  
 +void app_remote_publish_workbench(app_remote_handle_t s, const app_remote_workbench_t *snapshot)
 +{
@@ -237,5 +197,3 @@ index ca650ad..c622425 100644
 +}
 +
  bool app_remote_offer_photo(void *handle, uint8_t *data, size_t size)
- {
-     struct app_remote *s = handle;
