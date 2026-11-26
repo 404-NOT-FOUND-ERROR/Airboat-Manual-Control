@@ -67,43 +67,39 @@
 .experience .scene-tabs button, .experience .media-controls button,
 .experience .p1-toolbar button, .p1-parts button, .p1-scenes button { min-height: 44px; }
 .experience .p1-toolbar button { padding-inline: 8px; }
-@media (orientation: landscape) and (max-width: 1100px) {
-  .experience .hero { width: 40%; }
-  .experience .moments { left: 40%; padding: 16px; gap: 10px; }
-  .experience .scene-tabs button { font-size: clamp(8px, 1.05vw, 11px); padding-inline: 4px; }
-  .experience .scene-tabs button small { display: none; }
-  .p1-detail h2 { font-size: 22px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .p1-assembly [data-group] { transition: none; }
   .p1-assembly .rig-live.rig-signal .iso-line { animation: none; }
 }
 
-.experience #experience-close { display: inline-flex; min-height: 44px; align-items: center; }
-.experience .scene-stage { display: none; }
-.experience .hero { width: 35%; }
+.experience .site-header { display: none; }
+.experience .hero { top: 0; width: 30%; height: 100svh; }
 .experience .moments {
-  left: 35%;
+  inset: 0 0 0 30%;
   display: grid;
-  grid-template-rows: auto auto minmax(130px, .85fr) minmax(180px, 1.15fr);
-  gap: clamp(8px, 1.3vh, 16px);
-  padding: clamp(14px, 2vw, 34px);
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: clamp(12px, 2vh, 24px);
+  padding: clamp(12px, 3vh, 28px);
   overflow: auto;
-  background: linear-gradient(135deg, #858b9f, #777c91);
+  background: #747e8a;
   color: #fff;
 }
 .experience.metal-theme .expression-layer {
   display: grid;
-  grid-template-rows: auto auto minmax(150px, 1fr) minmax(130px, .68fr);
-  gap: clamp(8px, 1.4vh, 16px);
-  padding: clamp(16px, 2.2vw, 36px);
+  grid-template-rows: auto auto minmax(150px, 1fr) minmax(125px, .68fr) auto;
+  gap: clamp(8px, 1.6vh, 17px);
+  padding: clamp(12px, 3vh, 28px);
   color: #fff;
-  background: linear-gradient(155deg, #858da1, #70788e);
+  background: linear-gradient(165deg, #52616b, #424d5b);
 }
 .experience.metal-theme .expression-layer[hidden] { display: none; }
-.experience.metal-theme .hero .p1-identity h1 { position: static; margin: 0; font-size: clamp(27px, 4vw, 59px); font-weight: 610; line-height: 1; letter-spacing: -.05em; }
-.p1-identity h1 span { font: 650 clamp(12px, 1.8vw, 27px)/1 "Segoe UI", sans-serif; letter-spacing: .01em; white-space: nowrap; }
-.p1-identity p { margin: .55em 0 0; color: #f0f2f9; font-size: clamp(13px, 1.65vw, 20px); }
+.experience.metal-theme .hero .p1-identity h1 { position: static; margin: 0; font-size: 42px; font-weight: 610; line-height: 1; letter-spacing: 0; }
+.p1-identity h1 span { font: 650 16px/1 "Segoe UI", sans-serif; white-space: nowrap; }
+.p1-identity p { margin: .55em 0 0; color: #f0f2f9; font-size: 15px; }
+.p1-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 6px; border-top: 1px solid #ffffff38; }
+.p1-actions button { min-height: 44px; padding: 0 3px; color: #f5f7fa; font-size: 12px; }
+.p1-actions .developer-status { order: 1; width: 100%; }
+.p1-actions .developer-status:empty { display: none; }
 .p1-toolbar { padding: 0; border: 0; background: transparent; min-height: 44px; }
 .p1-toolbar button { border: 1px solid #e4e8fb64; border-radius: 5px; }
 .p1-face {
@@ -130,12 +126,44 @@
 .p1-speech dl div { padding: 8px 0; border-bottom: 1px solid #ffffff38; }
 .p1-speech dt { color: #e0e8fa; font-size: 11px; }
 .p1-speech dd { margin: 3px 0 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.p1-showcase, .p1-telemetry { min-width: 0; display: grid; gap: clamp(8px, 1.6vh, 17px); }
+.p1-showcase { grid-template-rows: auto minmax(200px, 1fr) auto; }
+.p1-telemetry { grid-template-rows: minmax(165px, .86fr) minmax(283px, 1.14fr); }
 .experience .moments .scene-tabs { margin: 0; width: 100%; overflow: visible; }
-.experience .scene-tabs button { min-width: 0; flex: 1; font-size: clamp(9px, 1vw, 13px); padding: 0 5px; }
+.experience .scene-tabs button { min-width: 0; flex: 1; font-size: 13px; padding: 0 5px; text-align: center; letter-spacing: 0; }
 .experience .scene-tabs button[aria-selected="true"] { background: #ecedf5; color: #384258; }
+.p1-media { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.experience .scene-stage {
+  height: 100%;
+  min-height: 0;
+  border-radius: 8px;
+  isolation: isolate;
+  background: #27313a;
+}
+.experience .scene-stage video { object-fit: cover; }
+.experience .scene-vignette { background: linear-gradient(0deg, #19222bd9, transparent 28%); }
+.experience .scene-stage:not(.has-video) .scene-pet { width: 47%; left: 27%; top: 32%; }
+.experience .scene-stage .scene-stamp {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  inset: 12px 12px auto;
+  font: 600 12px/1.3 "Segoe UI", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+.scene-stamp #scene-number { display: none; }
+.scene-stamp span { padding: 6px 8px; background: #25303ad9; border-radius: 4px; }
+.experience .media-controls { bottom: 10px; inset-inline: 10px; z-index: 3; gap: 4px; justify-content: space-between; font: 600 12px/1.3 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.experience .scene-stage:not(.has-video) .media-controls { justify-content: center; }
+.experience .scene-stage:not(.has-video) :is(#play-toggle, #mute-toggle), .experience .media-rule { display: none; }
+.experience .media-controls button { padding: 0 8px; color: #fff; }
+.experience .scene-stage:not(.has-video) #video-toggle { background: #f3f4ed; color: #293440; padding-inline: 16px; border-radius: 5px; }
+.experience .p1-media .media-message { margin: 5px 0 0; min-height: 0; opacity: 1; font-size: 12px; }
+.p1-media .media-message:empty { display: none; }
 .p1-detail { min-height: 46px; }
-.p1-detail h2 { font-size: clamp(17px, 2.2vw, 29px); line-height: 1.12; }
-.p1-description { color: #f1f3fa; font-size: clamp(11px, 1.15vw, 14px); }
+.p1-detail h2 { font-size: 21px; line-height: 1.2; letter-spacing: 0; }
+.p1-description { color: #f1f3fa; font-size: 13px; }
 .p1-start { min-width: 78px; border-radius: 5px; }
 .p1-scenes { margin-bottom: 4px; }
 .p1-scenes button { min-height: 44px; border-radius: 5px; }
@@ -152,22 +180,29 @@
 .p1-graph-stage { position: relative; min-height: 0; overflow: hidden; border-radius: 5px; }
 .p1-anatomy {
   display: grid;
-  grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr) clamp(142px, 16vw, 225px);
-  gap: 3px 8px;
-  background: radial-gradient(ellipse at 35% 50%, #59647e, #3a4358 76%);
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 5px;
+  background: #374654;
 }
-.p1-anatomy figcaption { grid-column: 1 / -1; padding: 0 0 5px; border: 0; }
+.p1-anatomy figcaption { padding: 0; border: 0; }
 .p1-assembly { min-height: 0; }
 .p1-assembly svg { width: 100%; height: 100%; }
 .p1-assembly .iso { --anatomy-paper: transparent !important; }
-.p1-parts { align-self: start; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 0; }
-.p1-parts button { min-width: 0; padding: 2px; border-radius: 4px; font-size: clamp(9px, 1.05vw, 13px); line-height: 1.1; }
-.p1-parts button[data-part="motor"] { grid-column: auto; }
+.p1-parts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 0; }
+.p1-parts button { min-width: 0; padding: 2px; border-radius: 4px; font-size: 11px; line-height: 1.1; }
 .experience .p1-parts button { min-height: 44px; }
-.p1-part-detail { grid-column: 1 / -1; padding: 4px 0 0; border-top: 1px solid #edf1fa43; }
+.p1-part-detail { min-height: 50px; padding: 4px 0 0; border-top: 1px solid #edf1fa43; }
 .p1-part-detail strong, .p1-part-detail p { font-size: 11px; }
 .p1-part-detail p { margin: 0; color: #e0e6f7; line-height: 1.35; }
-@media (max-height: 720px) {
-  .p1-anatomy { grid-template-columns: minmax(0, 1fr) clamp(180px, 20vw, 286px); }
-  .p1-parts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (orientation: landscape) and (max-width: 900px) {
+  .experience .hero { width: 28%; }
+  .experience .moments { left: 28%; }
+  .experience.metal-theme .hero .p1-identity h1 { font-size: 32px; }
+  .p1-identity h1 span { font-size: 13px; }
+  .p1-detail { gap: 8px; }
+}
+@media (orientation: portrait) {
+  .experience .hero { width: 100%; height: 46svh; }
+  .experience .moments { inset: 46svh 0 0; grid-template-columns: minmax(0, 1fr); }
+  .experience.metal-theme .expression-layer { grid-template-rows: auto auto minmax(65px, 1fr) minmax(48px, .65fr) auto; }
 }

@@ -5,6 +5,7 @@ import ipaddress
 import json
 import base64
 import hashlib
+import re
 import select
 import socket
 from functools import partial
@@ -90,10 +91,47 @@ class Preview(SimpleHTTPRequestHandler):
             path = Path(self.translate_path(self.path))
             if path.is_dir() and not (path / "index.html").is_file():
                 self.send_error(404)
+            elif path.parent == HERE / "assets" / "videos" and path.suffix == ".mp4" and self.headers.get("Range"):
+                self.serve_video_range(path)
             else:
                 super().do_GET()
 
     do_HEAD = do_GET
+
+    def serve_video_range(self, path):
+        try:
+            video = path.open("rb")
+        except OSError:
+            self.send_error(404)
+            return
+        with video:
+            size = video.seek(0, 2)
+            match = re.fullmatch(r"bytes=([0-9]{0,20})-([0-9]{0,20})", self.headers["Range"])
+            first, last = match.groups() if match else ("", "")
+            if first:
+                start = int(first)
+                end = min(int(last), size - 1) if last else size - 1
+            else:
+                start, end = max(0, size - int(last or "0")), size - 1
+            if start > end:
+                self.reply(416, b"", "video/mp4", (("Content-Range", f"bytes */{size}"),))
+                return
+            self.send_response(206)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            remaining = end - start + 1
+            self.send_header("Content-Length", str(remaining))
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+            video.seek(start)
+            try:
+                while remaining and (chunk := video.read(min(remaining, 64 * 1024))):
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass
 
     def do_POST(self):
         path = urlsplit(self.path).path

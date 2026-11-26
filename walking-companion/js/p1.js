@@ -15,7 +15,7 @@ const hardware = {
   altitude: ['气压', 'H1 I²C → BMP581 → 相对高度', '气压模块已通过读取检查。定高控制待验。'],
 };
 
-export function mountP1({ drawer, panel, graph, frame, notify, developerMode, manager }) {
+export function mountP1({ showcase, telemetry, panel, graph, frame, notify, developerMode, manager }) {
   const link = new AirBoatLink();
   let selected, running, online = false, lastFace, photoURL;
   let pendingStart;
@@ -52,9 +52,9 @@ export function mountP1({ drawer, panel, graph, frame, notify, developerMode, ma
     </div>
     <p class="p1-feedback" role="status"></p>
     <div class="p1-photo" hidden><button type="button">领取照片</button><a hidden download>保存照片 ↓</a></div>`;
-  const tabs = drawer.querySelector('.scene-tabs');
-  for (const tab of tabs.children) tab.setAttribute('aria-controls', scene.id);
-  tabs.after(scene);
+  const tabs = showcase.querySelector('.scene-tabs');
+  for (const tab of tabs.children) tab.setAttribute('aria-controls', `${scene.id} scene-panel`);
+  showcase.append(scene);
   const choose = scene.querySelector('.p1-scenes');
   const play = scene.querySelector('.p1-start');
   const feedback = scene.querySelector('.p1-feedback');
@@ -88,7 +88,7 @@ export function mountP1({ drawer, panel, graph, frame, notify, developerMode, ma
       <div class="p1-assembly" aria-label="Mosaico 外设装配示意"></div>
       <div class="p1-parts" aria-label="硬件支路"></div>
       <div class="p1-part-detail"><strong></strong><p></p></div>`;
-  drawer.append(graph, anatomy);
+  telemetry.append(graph, anatomy);
   const parts = anatomy.querySelector('.p1-parts');
   const hardwareStatus = anatomy.querySelector('.p1-hardware-state');
   const partChain = anatomy.querySelector('.p1-part-detail strong');

@@ -110,6 +110,17 @@ class PreviewProxyTests(unittest.TestCase):
         self.assertEqual((status, photo), (200, b"\xff\xd8test-photo"))
         self.assertEqual([row[0] for row in self.device.seen[-2:]], ["/api", "/photo"])
         self.assertTrue(all(row[1] == f"127.0.0.1:{preview.DEVICE_PORT}" for row in self.device.seen[-2:]))
+
+    def test_tablet_video_supports_byte_ranges(self):
+        route = "/assets/videos/walking.mp4"
+        source = (preview.HERE / route.lstrip("/")).read_bytes()
+        for requested, data, expected in (
+            ("bytes=0-1", source[:2], 206),
+            ("bytes=-8", source[-8:], 206),
+            (f"bytes={len(source)}-", b"", 416),
+        ):
+            with self.subTest(requested=requested):
+                self.assertEqual(self.request("GET", route, headers={"Range": requested}), (expected, data))
         self.assertTrue(all(row[2] == f"http://127.0.0.1:{preview.DEVICE_PORT}" for row in self.device.seen[-2:]))
 
     def test_websocket_handshake_and_frames_are_forwarded(self):
