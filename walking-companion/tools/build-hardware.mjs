@@ -9,7 +9,7 @@ const [k, g, a] = await Promise.all([load('iso-kit'), load('lathe'), load('audit
 const plan = (x, y, w, d, r = 0) => ({ x, y, w, d, r });
 const deck = plan(0, 0, 226, 142, 5);
 const width = 700, height = 410;
-const P = k.fitProjection(k.boxCorners(deck, -10, 22), width, height, { pad: 16, azimuth: 42, elevation: 36 });
+const P = k.fitProjection(k.boxCorners(deck, -10, 22), width, height, { pad: 16, azimuth: 65, elevation: 36 });
 const R = a.recorder(P, { ground: s => s.name.startsWith('bench.foot') });
 const at = point => k.iso(point, P);
 const trace = [];
@@ -44,10 +44,12 @@ function anchor(name, point) {
   const [x,y] = at(point);
   anchors.push(`<circle data-anchor="${name}" cx="${x}" cy="${y}" r="0"/>`);
 }
-function signal(name, group, points) {
+function signal(name, group, points, kind = 'signal') {
   const stops = points.map(at);
-  const line = k.wireSvg(stops[0],stops.at(-1),{via:stops.slice(1,-1),tone:'hi',size:2});
-  trace.push(k.groupSvg(line,{'data-group':group,class:'rig-signal','data-wire':name}));
+  const wire = kind === 'logical' ? '' : k.wireSvg(stops[0],stops.at(-1),{via:stops.slice(1,-1),tone:'hi',size:2});
+  const path = k.pathOf(stops);
+  const ink = `<path class="rig-flow-track" d="${path}"/><path class="rig-flow-dash" d="${path}"/>`;
+  trace.push(k.groupSvg(wire+ink,{'data-group':group,class:'rig-signal','data-wire':name,'data-kind':kind}));
 }
 
 for (const [index,[x,y]] of k.corners(deck,13).entries()) {
@@ -148,9 +150,9 @@ stripe('battery.strap.1',power,151,15,3,23,8);
 stripe('battery.strap.2',power,172,15,3,23,8);
 mark('1S LIPO',146,10,7.4);
 anchor('battery',[164,26,8]);
-signal('battery lead',power,[[162,43,5],[162,47,5],[162,50,4]]);
-signal('1S to D1','motor m1 m2',[[162,50,4],[155,53,3],[149,57,2]]);
-signal('1S to D2','motor m3',[[162,50,4],[145,53,3],[145,80,2],[149,84,2]]);
+signal('battery lead',power,[[162,43,5],[162,47,5],[162,50,4]],'power');
+signal('1S to D1','motor m1 m2',[[162,50,4],[155,53,3],[149,57,2]],'power');
+signal('1S to D2','motor m3',[[162,50,4],[145,53,3],[145,80,2],[149,84,2]],'power');
 
 box('pca.board','tilt',66,110,36,17,0,2,1,'hi');
 box('pca.ic','tilt',80,115,11,7,2,2,1);
@@ -165,7 +167,8 @@ box('bmp.board','altitude',118,108,19,15,0,2,1,'hi');
 box('bmp.can','altitude',124,112,7,6,2,1.6,1,'hi');
 disk('bmp.vent','altitude',127,115,3.6,.8,.2);
 for (let i=0;i<4;i++) stripe('bmp.pin.'+i,'altitude',119+i*4,120,1.8,1.5,2);
-signal('I²C to distribution','tilt altitude',[[133,76,6],[140,79,6],[140,103,2],[126,108,2]]);
+signal('I²C from H1','tilt altitude',[[133,76,6],[140,79,6],[140,103,2]]);
+signal('I²C to BMP581','altitude',[[140,103,2],[126,108,2]]);
 signal('I²C to PCA9685','tilt',[[140,103,2],[108,103,2],[100,110,2]]);
 signal('SG90 PWM','tilt',[[66,121,2],[61,119,2],[52,117,2]]);
 mark('SG90',34,135,6.2);
@@ -174,6 +177,14 @@ mark('BMP581',118,132,6.8);
 anchor('servo',[43,112,18]);
 anchor('pca',[85,118,4]);
 anchor('bmp',[127,115,4]);
+
+// These arrows trace data through the visible hardware, including links inside the host.
+signal('Mic to host','voice',[[118,86,17],[120,86,24],[118,51,28],[95,50,19]],'logical');
+signal('Host to speaker','voice sense',[[94,50,18],[72,49,27],[64,72,27],[76,85,18]],'logical');
+signal('IMU to host','sense',[[103,88,16],[109,87,25],[106,64,26],[94,50,18]],'logical');
+signal('Host to AMOLED','face sense',[[94,50,18],[93,56,27],[91,69,21]],'logical');
+signal('Lens to H2 ribbon','camera',[[36,61,14],[41,63,16],[48,67,10]],'logical');
+signal('H2 to host','camera',[[50,67,10],[55,65,10],[62,57,27],[94,50,18]],'logical');
 
 a.settle(R,P);
 a.auditOrExit(R,P);
@@ -191,6 +202,7 @@ const materials = `<style>
   [data-group=face] .iso-solid:has([data-tone=lo])>.iso-top{fill:#293249}
   .rig-signal .iso-line{stroke-width:2;stroke:#dbb795}
   .rig-signal .iso-wire-end{fill:#e5c7aa}
+  .rig-flow-track,.rig-flow-dash{display:none}
   .rig-engraving .iso-face-text{font-weight:750;letter-spacing:0}
   .rig-engraving text:first-child{fill:#152534;stroke:#152534;stroke-width:.48;paint-order:stroke}
   .rig-engraving text:last-child{fill:#e7f1f4}

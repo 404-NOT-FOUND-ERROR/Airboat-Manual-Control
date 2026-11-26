@@ -1,6 +1,6 @@
 import { AirBoatLink } from './p1-link.js';
 import { experiences, liveLane } from './p1-scenes.js';
-import { mountHardware } from './p1-hardware.js';
+import { mountHardware } from './p1-hardware.js?v=p1-flow';
 
 const catalog = '1b835f35bd1cb71d08590f3027fba25d2892a8ec5bb7f56a5145e3be16ea359b';
 

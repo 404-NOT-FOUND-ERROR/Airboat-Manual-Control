@@ -27,6 +27,7 @@ const paths = {
 const motorParts = ['m1', 'm2', 'm3'];
 const svgNS = 'http://www.w3.org/2000/svg';
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const riseMs = 760, holdMs = 2150, returnMs = 1040;
 
 export function mountHardware(parent) {
   const figure = document.createElement('figure');
@@ -48,14 +49,16 @@ export function mountHardware(parent) {
   const detail = figure.querySelector('.p1-part-detail p');
   let layout = [];
   let marks = [];
+  let inscriptions = [];
   let projected = {};
   let selected = 'voice';
   let demonstrating = false;
   let running = null;
   let snapshot = null;
-  let diagram, bounds, loading, camera, motion;
+  let diagram, bounds, loading, camera, motion, tour;
   let width = 0, height = 0;
   let currentRoute;
+  let focusRoute;
 
   function labelWidth() { return width < 340 ? 84 : 101; }
 
@@ -64,7 +67,7 @@ export function mountHardware(parent) {
     const motors = motorParts.filter((_, index) => Number.isFinite(motorValues[index]) && motorValues[index] !== 0);
     const dialogue = snapshot?.dialogue?.phase;
     const reported = motors.length ? 'drive' : snapshot?.performance?.head_busy ? 'tilt' :
-      ['listening', 'thinking', 'speaking'].includes(dialogue) ? 'voice' : null;
+      ['listening', 'thinking', 'speaking'].includes(dialogue) ? 'voice' : snapshot?.face?.active ? 'face' : null;
     const liveMotion = reported === 'drive' || reported === 'tilt';
     const showDemo = demonstrating && !liveMotion;
     const focused = liveMotion ? reported : showDemo ? selected : running ?? reported;
@@ -84,7 +87,9 @@ export function mountHardware(parent) {
     const key = `${focused ?? ''}/${selected}/${mode}/${showingMotors ? motors.join() : ''}`;
     if (currentRoute !== key && diagram) {
       currentRoute = key;
-      updatePath(focused ? names : [], focused ?? selected, showingLive ? (showingMotors ? motors : [focused]) : []);
+      const shooting = focused ? `${focused}/${showingMotors ? motors.join() : ''}/${showDemo ? 'demo' : 'device'}` : '';
+      updatePath(focused ? names : [], focused ?? selected, showingMotors ? motors : [], showingLive, shooting !== focusRoute);
+      focusRoute = shooting;
     }
     for (const item of layout) {
       const value = showingMotors ? motorValues[motorParts.indexOf(item.name)] : undefined;
@@ -93,14 +98,18 @@ export function mountHardware(parent) {
     }
   }
 
-  function updatePath(names, path, active) {
+  function updatePath(names, path, motors, live, startTour) {
+    const branches = path === 'drive' ? motors : [path];
+    figure.classList.toggle('p1-route-active', names.length > 0);
     for (const { node, groups } of marks) {
-      node.classList.toggle('rig-selected', groups.includes(path));
-      node.classList.toggle('rig-live', active.some(name => groups.includes(name)));
+      const matches = branches.some(name => groups.includes(name));
+      node.classList.toggle('rig-selected', matches);
+      node.classList.toggle('rig-live', matches && live && !node.hasAttribute('data-wire'));
+      node.classList.toggle('rig-flowing', matches && names.length > 0 && node.hasAttribute('data-wire'));
     }
     labels.replaceChildren();
     leaders.replaceChildren();
-    leaders.classList.toggle('is-live', active.length > 0);
+    leaders.classList.toggle('is-live', live);
     layout = names.map((name, index) => {
       const label = document.createElement('div');
       label.className = 'p1-callout';
@@ -117,43 +126,66 @@ export function mountHardware(parent) {
       leaders.append(wire, tip);
       return { name, label, action, wire, tip, ...projected[name] };
     });
-    moveCamera();
+    if (startTour || !camera) moveCamera(names.length > 0);
+    else paint(camera);
   }
 
-  function moveCamera() {
+  function poses() {
     if (!bounds || !width || !height) return;
     const base = Math.min((width - 12) / bounds.width, (height - 10) / bounds.height);
     const overview = [bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, base];
-    let target = overview;
-    if (layout.length) {
-      const xs = layout.map(item => item.x);
-      const ys = layout.map(item => item.y);
-      const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
-      const room = Math.min((width - 2 * (labelWidth() + 11)) / Math.max(right - left, 38),
-        (height - 38) / Math.max(bottom - top, 34));
-      target = [(left + right) / 2, (top + bottom) / 2, Math.max(base * 1.12, Math.min(base * 2.05, room))];
-    }
-    const start = camera ?? overview;
+    if (!layout.length) return { overview, close: overview };
+    const xs = layout.map(item => item.x);
+    const ys = layout.map(item => item.y);
+    const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+    const room = Math.min((width - 44) / Math.max(right - left, 30), (height - 46) / Math.max(bottom - top, 28));
+    const scale = Math.min(base * 3.25, room, Math.max(base * 1.28, room * .87));
+    return { overview, close: [(left + right) / 2, (top + bottom) / 2, scale] };
+  }
+
+  function moveCamera(focus) {
+    const frame = poses();
+    if (!frame) return;
     cancelAnimationFrame(motion);
-    if (!camera || reducedMotion.matches) {
-      paint(target);
+    if (reducedMotion.matches) {
+      tour = null;
+      paint(frame.overview, 'overview', frame.overview[2]);
       return;
     }
-    const began = performance.now();
-    function animate(now) {
-      const t = Math.min(1, (now - began) / 560);
-      const eased = 1 - (1 - t) ** 3;
-      paint(target.map((value, index) => start[index] + (value - start[index]) * eased));
-      if (t < 1) motion = requestAnimationFrame(animate);
-    }
-    paint(start);
+    tour = { focus, from: camera ?? frame.overview, started: performance.now() };
+    if (!camera) paint(frame.overview, 'overview', frame.overview[2]);
     motion = requestAnimationFrame(animate);
   }
 
-  function paint(pose) {
+  function animate(now) {
+    const frame = poses();
+    if (!tour || !frame) return;
+    const { overview, close } = frame;
+    const elapsed = now - tour.started;
+    const returnAt = tour.focus ? riseMs + holdMs : 0;
+    const mix = (from, to, t) => from.map((value, index) => value + (to[index] - value) * t);
+    const ease = t => t * t * (3 - 2 * t);
+    if (elapsed < returnAt) {
+      paint(mix(tour.from, close, ease(Math.min(1, elapsed / riseMs))), elapsed < riseMs ? 'approach' : 'detail', overview[2]);
+    } else if (elapsed < returnAt + returnMs) {
+      paint(mix(tour.focus ? close : tour.from, overview, ease(Math.max(0, (elapsed - returnAt) / returnMs))), 'return', overview[2]);
+    } else {
+      tour = null;
+      paint(overview, 'overview', overview[2]);
+      return;
+    }
+    motion = requestAnimationFrame(animate);
+  }
+
+  function paint(pose, phase, base = pose[2]) {
     camera = pose;
+    if (phase && stage.dataset.camera !== phase) stage.dataset.camera = phase;
     const [x, y, scale] = pose;
     diagram.setAttribute('viewBox', [x - width / (2 * scale), y - height / (2 * scale), width / scale, height / scale].join(' '));
+    for (const { node, size } of inscriptions) {
+      const maximum = Math.max(8, size * base);
+      node.setAttribute('font-size', Math.min(size, maximum / scale).toFixed(2));
+    }
     if (!layout.length) return;
     const byX = [...layout].sort((a,b) => a.x - b.x);
     const middle = Math.ceil(byX.length / 2);
@@ -183,7 +215,7 @@ export function mountHardware(parent) {
 
   async function load() {
     try {
-      const response = await fetch('assets/hardware/airboat-rig.svg?v=p1-engraving');
+      const response = await fetch('assets/hardware/airboat-rig.svg?v=p1-flow');
       if (!response.ok) throw new Error('Unable to load hardware drawing');
       const svg = new DOMParser().parseFromString(await response.text(), 'image/svg+xml').documentElement;
       if (svg.localName !== 'svg') throw new Error('Invalid hardware drawing');
@@ -191,9 +223,21 @@ export function mountHardware(parent) {
       board.replaceChildren(diagram);
       bounds = diagram.querySelector('.rig-world').getBBox();
       marks = [...diagram.querySelectorAll('[data-group]')].map(node => ({ node, groups: node.dataset.group.split(' ') }));
+      for (const path of diagram.querySelectorAll('.rig-flow-dash')) {
+        const distance = path.getTotalLength() * .7;
+        const point = path.getPointAtLength(distance);
+        const next = path.getPointAtLength(distance + 1);
+        const angle = Math.atan2(next.y - point.y, next.x - point.x) * 180 / Math.PI;
+        const arrow = document.createElementNS(svgNS, 'path');
+        arrow.setAttribute('class', 'rig-flow-arrow');
+        arrow.setAttribute('d', 'M-4 -3 L0 0 L-4 3');
+        arrow.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
+        path.after(arrow);
+      }
       projected = Object.fromEntries([...diagram.querySelectorAll('[data-anchor]')].map(node => [node.dataset.anchor, {
         x: Number(node.getAttribute('cx')), y: Number(node.getAttribute('cy')),
       }]));
+      inscriptions = [...diagram.querySelectorAll('.rig-engraving text')].map(node => ({ node, size: Number(node.getAttribute('font-size')) }));
       update();
     } catch {
       board.textContent = '装配图暂时无法加载。';
@@ -203,8 +247,12 @@ export function mountHardware(parent) {
 
   new ResizeObserver(([entry]) => {
     ({ width, height } = entry.contentRect);
-    if (width && height) moveCamera();
+    if (!width || !height || !diagram || tour) return;
+    const frame = poses();
+    if (frame) paint(frame.overview, 'overview');
   }).observe(stage);
+
+  reducedMotion.addEventListener('change', () => { if (diagram && reducedMotion.matches) moveCamera(false); });
 
   return {
     load() { if (!loading) loading = load(); },
