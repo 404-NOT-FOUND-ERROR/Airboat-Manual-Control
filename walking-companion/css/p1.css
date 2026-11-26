@@ -49,27 +49,24 @@
 .p1-dev-options { display: flex; flex-wrap: wrap; gap: 10px; }
 .p1-anatomy { margin: 0; border: 1px solid #a2aabd; background: #424b60; }
 .p1-anatomy figcaption { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #ffffff30; font-size: 13px; }
-.p1-assembly svg { display: block; width: 100%; height: auto; }
-.p1-assembly [data-group] { transition: opacity .3s ease, filter .3s ease; }
-.p1-assembly [data-group] { opacity: .57; }
-.p1-assembly .rig-selected { opacity: 1; filter: brightness(1.24); }
+.p1-board [data-group] { opacity: .72; transition: opacity .3s ease, filter .3s ease; }
+.p1-board [data-group="bench"] { opacity: 1; }
+.p1-assembly .rig-selected { opacity: 1; filter: brightness(1.18); }
 .p1-assembly .rig-live { opacity: 1; filter: brightness(1.35) drop-shadow(0 0 3px #caee9175); }
 .p1-assembly .rig-live .iso-line { stroke: #d4fb9b; }
 .p1-assembly .rig-live.rig-signal .iso-line { stroke-dasharray: 8 3; animation: p1-signal-flow 1.15s linear infinite; }
 @keyframes p1-signal-flow { to { stroke-dashoffset: -22; } }
-.p1-parts { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px; }
-.p1-parts button { padding: 9px 11px; min-height: 40px; border: 1px solid #ffffff46; color: inherit; }
-.p1-parts button[aria-pressed="true"] { background: #e9edfa; color: #323c52; }
 .p1-part-detail { padding: 12px; }
 .p1-part-detail p { font-size: 13px; margin: 5px 0 0; }
 .p1-part-detail strong { font-size: 13px; }
 .p1-toolbar [hidden], .p1-scene [hidden], .p1-dialog [hidden] { display: none !important; }
 .experience .scene-tabs button, .experience .media-controls button,
-.experience .p1-toolbar button, .p1-parts button, .p1-scenes button { min-height: 44px; }
+.experience .p1-toolbar button, .p1-scenes button { min-height: 44px; }
 .experience .p1-toolbar button { padding-inline: 8px; }
 @media (prefers-reduced-motion: reduce) {
   .p1-assembly [data-group] { transition: none; }
   .p1-assembly .rig-live.rig-signal .iso-line { animation: none; }
+  .p1-callouts .p1-callout { animation: none; }
 }
 
 .experience .site-header { display: none; }
@@ -180,17 +177,38 @@
 .p1-graph-stage { position: relative; min-height: 0; overflow: hidden; border-radius: 5px; }
 .p1-anatomy {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 5px;
   background: #374654;
 }
 .p1-anatomy figcaption { padding: 0; border: 0; }
-.p1-assembly { min-height: 0; }
-.p1-assembly svg { width: 100%; height: 100%; }
+.p1-assembly { position: relative; min-height: 0; overflow: hidden; isolation: isolate; border-radius: 4px; }
+.p1-board, .p1-leaders, .p1-callouts { position: absolute; inset: 0; }
+.p1-board svg, .p1-leaders { display: block; width: 100%; height: 100%; }
 .p1-assembly .iso { --anatomy-paper: transparent !important; }
-.p1-parts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 0; }
-.p1-parts button { min-width: 0; padding: 2px; border-radius: 4px; font-size: 11px; line-height: 1.1; }
-.experience .p1-parts button { min-height: 44px; }
+.p1-leaders, .p1-callouts { pointer-events: none; }
+.p1-leaders polyline { fill: none; stroke: #c7d9dc; stroke-width: 1; stroke-linejoin: round; }
+.p1-leaders circle { fill: #e5efed; stroke: #2a424d; stroke-width: 1; }
+.p1-leaders.is-live polyline { stroke: #c8ee9e; }
+.p1-leaders.is-live circle { fill: #dcf6b8; }
+.p1-callout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  min-height: 32px;
+  padding: 3px 4px;
+  background: #23333deb;
+  border: 1px solid #96b0b173;
+  border-radius: 4px;
+  color: #f3f7f4;
+  font: 11px/1.12 "Segoe UI", "Microsoft YaHei", sans-serif;
+  animation: p1-callout-in 220ms var(--arrival) both;
+}
+.p1-callout span { color: #cbdad9; }
+@keyframes p1-callout-in { from { opacity: 0; } to { opacity: 1; } }
 .p1-part-detail { min-height: 50px; padding: 4px 0 0; border-top: 1px solid #edf1fa43; }
 .p1-part-detail strong, .p1-part-detail p { font-size: 11px; }
 .p1-part-detail p { margin: 0; color: #e0e6f7; line-height: 1.35; }

@@ -1,6 +1,6 @@
 import {developerMode} from './developer.js';
-import {mountP1} from './p1.js?v=p1-video';
-import {manager, stopSceneVideo} from './main.js?v=p1-video';
+import {mountP1} from './p1.js?v=p1-engraving';
+import {manager, stopSceneVideo} from './main.js?v=p1-engraving';
 const $=s=>document.querySelector(s),drawer=$('#moments'),hero=$('.hero');
 window.companionDeveloper=developerMode;
 const open=document.createElement('button');open.id='experience-open';open.className='experience-open';open.innerHTML='立即体验 <span>↗</span><small>MEET YOUR LITTLE COMPANION</small>';open.setAttribute('aria-controls','moments');open.setAttribute('aria-expanded','false');hero.append(open);

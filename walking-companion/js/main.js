@@ -28,6 +28,7 @@ function syncPlayback(){
 video.addEventListener('play',syncPlayback);
 video.addEventListener('pause',syncPlayback);
 export function stopSceneVideo(){
+ if(sceneStage.classList.contains('has-video'))sceneStage.dispatchEvent(new CustomEvent('scene-video',{detail:false}));
  videoActive=false;
  video.pause();
  video.hidden=true;
@@ -42,7 +43,13 @@ export function stopSceneVideo(){
 function mediaError(){if(!videoActive)return;stopSceneVideo();videoToggle.textContent='重试视频 ↗';mediaMessage.textContent='视频暂时无法播放。';}
 video.addEventListener('error',mediaError);
 video.addEventListener('waiting',()=>{if(videoActive)$('#media-message').textContent='视频加载中…';});
-video.addEventListener('playing',()=>{if(videoActive){sceneStage.classList.add('has-video');video.hidden=false;$('#scene-canvas').hidden=true;$('#scene-pet').hidden=true;$('#media-label').textContent='概念演示';mediaMessage.textContent='';videoToggle.textContent='退出演示';}});
+video.addEventListener('playing',()=>{
+ if(!videoActive)return;
+ const opening=!sceneStage.classList.contains('has-video');
+ sceneStage.classList.add('has-video');video.hidden=false;$('#scene-canvas').hidden=true;$('#scene-pet').hidden=true;
+ $('#media-label').textContent='概念演示';mediaMessage.textContent='';videoToggle.textContent='退出演示';
+ if(opening)sceneStage.dispatchEvent(new CustomEvent('scene-video',{detail:true}));
+});
 async function updateScene(scene){const token=++selection;stopSceneVideo();motion.scene=scene.id;motion.react('float');
  const index=scenes.indexOf(scene);[...tabs.children].forEach((tab,i)=>{tab.setAttribute('aria-selected',String(i===index));tab.tabIndex=i===index?0:-1;});
  $('#scene-panel').setAttribute('aria-labelledby',`tab-${scene.id}`);$('#scene-number').textContent=scene.label;$('#scene-kicker').textContent=scene.kicker;$('#scene-title').innerHTML=scene.title;$('#scene-description').textContent=scene.description;$('#device-scene').textContent=scene.name[0]+scene.name.slice(1).toLowerCase();

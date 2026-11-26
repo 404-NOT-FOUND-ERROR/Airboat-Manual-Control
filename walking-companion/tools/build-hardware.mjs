@@ -13,6 +13,8 @@ const P = k.fitProjection(k.boxCorners(deck, -10, 22), width, height, { pad: 16,
 const R = a.recorder(P, { ground: s => s.name.startsWith('bench.foot') });
 const at = point => k.iso(point, P);
 const trace = [];
+const engraving = [];
+const anchors = [];
 
 function solid(name, group, point, shape, svg, tone) {
   R.put({ name, at: point, shapes: [R.solid(shape)], markup:
@@ -31,9 +33,16 @@ function disk(name, group, x, y, z, radius, h, tone = 'mid') {
 function stripe(name, group, x, y, w, d, z) {
   box(name, group, x, y, w, d, z, .45, .4, 'hi');
 }
-function label(text, x, y, z, size = 5) {
-  const markup = k.faceTextSvg(k.topMatrix([x,y],z,P),text,{ size,tone:'hi' });
-  trace.push(markup);
+function mark(text, x, y, size = 6) {
+  const transform = k.topMatrix([x,y],.06,P);
+  engraving.push(k.groupSvg([
+    k.faceTextSvg(`${transform} translate(0 .48)`,text,{ size,tone:'hi' }),
+    k.faceTextSvg(transform,text,{ size,tone:'hi' }),
+  ], { class:'rig-engraving', 'data-engraving':text }));
+}
+function anchor(name, point) {
+  const [x,y] = at(point);
+  anchors.push(`<circle data-anchor="${name}" cx="${x}" cy="${y}" r="0"/>`);
 }
 function signal(name, group, points) {
   const stops = points.map(at);
@@ -65,6 +74,20 @@ box('head.h2','camera',50,56,10,19,4,6,1,'hi');
 for (let i=0;i<5;i++) stripe('head.speaker.'+i,'voice',65+i*4,85,2.7,1.3,17);
 disk('head.mic','voice',118,86,17,1.3,.4,'hi');
 box('head.usb','voice',82,91,13,6,4,4,1,'hi');
+mark('MOSAICO',23,25,9.5);
+mark('AMOLED',63,101,6.2);
+mark('BMI270',99,101,6.1);
+mark('MIC',103,108,6.8);
+mark('SPK',63,109,6.8);
+mark('H1',132,52);
+mark('H2',50,52);
+anchor('mosaico',[94,50,18]);
+anchor('amoled',[91,69,21]);
+anchor('mic',[118,86,17]);
+anchor('speaker',[76,85,17]);
+anchor('imu',[103,88,16]);
+anchor('h1',[130,62,10]);
+anchor('h2',[55,65,10]);
 
 box('camera.mount','camera',23,49,25,28,0,4,2);
 box('camera.pcb','camera',24,50,24,27,4,1.4,2,'hi');
@@ -73,6 +96,8 @@ disk('camera.barrel','camera',36,61,8.4,6.4,5,'hi');
 disk('camera.lens','camera',36,61,13.4,4.8,.7,'lit');
 stripe('camera.connector','camera',43,65,5,8,5.4);
 signal('camera ribbon','camera',[[48,67,10],[50,67,10]]);
+mark('H2 CAM',21,86,7);
+anchor('camera',[36,61,14]);
 
 for (const [index,y] of [57,84].entries()) {
   const name = 'driver.'+index;
@@ -83,6 +108,8 @@ for (const [index,y] of [57,84].entries()) {
     stripe(name+'.left-pin.'+i,group,151+i*5,y+1,3,1.4,2);
     stripe(name+'.right-pin.'+i,group,151+i*5,y+14,3,1.4,2);
   }
+  mark(index === 0 ? 'D1 / 8833' : 'D2 / 8833',148,y+23,6.1);
+  anchor(index === 0 ? 'd1' : 'd2',[162,y+8,4]);
 }
 signal('H1 PWM to D1','motor m1 m2',[[133,60,10],[141,60,10],[149,61,2]]);
 signal('H1 PWM to D2','motor m3',[[133,73,10],[140,77,10],[149,85,2]]);
@@ -106,7 +133,8 @@ for (const [index,y] of [25,65,104].entries()) {
       a.extruded(rim,17,.8,{name:bladeName}), k.extrude(rim,17,.8,P,{convex:true}),'hi');
   }
   disk(name+'.pin',group,x,y,17.8,1.25,1.6,'hi');
-  label('M'+(index+1),185,y+19,.2,5);
+  mark('M'+(index+1),193,y+17,8);
+  anchor(`m${index+1}`,[x,y,19.4]);
 }
 signal('D1 AO1/AO2 to M1','motor m1',[[176,60,2],[183,56,2],[186,32,2],[187,25,4]]);
 signal('D1 BO1/BO2 to M2','motor m2',[[176,66,2],[184,66,2],[187,65,4]]);
@@ -118,6 +146,8 @@ box('battery.1s',power,147,15,31,23,2,6,3,'hi');
 box('battery.plug',power,157,43,10,6,0,5,1,'hi');
 stripe('battery.strap.1',power,151,15,3,23,8);
 stripe('battery.strap.2',power,172,15,3,23,8);
+mark('1S LIPO',146,10,7.4);
+anchor('battery',[164,26,8]);
 signal('battery lead',power,[[162,43,5],[162,47,5],[162,50,4]]);
 signal('1S to D1','motor m1 m2',[[162,50,4],[155,53,3],[149,57,2]]);
 signal('1S to D2','motor m3',[[162,50,4],[145,53,3],[145,80,2],[149,84,2]]);
@@ -138,13 +168,19 @@ for (let i=0;i<4;i++) stripe('bmp.pin.'+i,'altitude',119+i*4,120,1.8,1.5,2);
 signal('I²C to distribution','tilt altitude',[[133,76,6],[140,79,6],[140,103,2],[126,108,2]]);
 signal('I²C to PCA9685','tilt',[[140,103,2],[108,103,2],[100,110,2]]);
 signal('SG90 PWM','tilt',[[66,121,2],[61,119,2],[52,117,2]]);
+mark('SG90',34,135,6.2);
+mark('PCA9685',67,135,6.3);
+mark('BMP581',118,132,6.8);
+anchor('servo',[43,112,18]);
+anchor('pca',[85,118,4]);
+anchor('bmp',[127,115,4]);
 
 a.settle(R,P);
 a.auditOrExit(R,P);
 if (process.exitCode) process.exit(process.exitCode);
 
 const light = process.argv.includes('--light');
-const objects = R.items.sort((left,right) => left.key-right.key).map(item => item.markup);
+R.items.sort((left,right) => left.key-right.key);
 const materials = `<style>
   .iso{--anatomy-paper:#31394a;--anatomy-top:#596781;--anatomy-face:#9bcd59;
     --anatomy-shade-0:#272f43;--anatomy-shade-1:#35405a;--anatomy-shade-2:#3c4864;--anatomy-shade-3:#485772;
@@ -155,11 +191,17 @@ const materials = `<style>
   [data-group=face] .iso-solid:has([data-tone=lo])>.iso-top{fill:#293249}
   .rig-signal .iso-line{stroke-width:2;stroke:#dbb795}
   .rig-signal .iso-wire-end{fill:#e5c7aa}
-  ${light ? '.iso[data-theme=light]{--anatomy-lit-top:#b4ea7c;--anatomy-hi:#2b3851;--anatomy-lo:#72819b;--anatomy-mid:#4f607b}' : ''}
+  .rig-engraving .iso-face-text{font-weight:750;letter-spacing:0}
+  .rig-engraving text:first-child{fill:#152534;stroke:#152534;stroke-width:.48;paint-order:stroke}
+  .rig-engraving text:last-child{fill:#e7f1f4}
+  ${light ? `.iso[data-theme=light]{--anatomy-lit-top:#b4ea7c;--anatomy-hi:#2b3851;--anatomy-lo:#72819b;--anatomy-mid:#4f607b}
+    .rig-engraving text:first-child{fill:#d8e5eb;stroke:#d8e5eb}
+    .rig-engraving text:last-child{fill:#243649}` : ''}
 </style>`;
+const model = R.items.map(item => item.name === 'bench.deck' ? item.markup + engraving.join('') : item.markup).join('');
 const svg = k.figureSvg({
   width,height,label:'Mosaico 中央托架、H2 相机、两块驱动板与三台推进电机，右侧为俯仰和气压扩展。',
-  standalone:light?'light':'dark',body:materials+objects.join('')+trace.join(''),
+  standalone:light?'light':'dark',body:materials+k.groupSvg(model+trace.join('')+anchors.join(''),{ class:'rig-world' }),
 });
 const target = new URL('../assets/hardware/',import.meta.url);
 mkdirSync(target,{recursive:true});
