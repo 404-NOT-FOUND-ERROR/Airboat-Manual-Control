@@ -44,10 +44,32 @@ function anchor(name, point) {
   const [x,y] = at(point);
   anchors.push(`<circle data-anchor="${name}" cx="${x}" cy="${y}" r="0"/>`);
 }
+function roundedRoute(points) {
+  const project = point => at(point).map(value => value.toFixed(2)).join(' ');
+  const toward = (from, to, radius, length) => from.map((value, axis) => value + (to[axis] - value) * radius / length);
+  let path = `M${project(points[0])}`;
+  for (let index = 1; index < points.length - 1; index++) {
+    const [before, corner, after] = points.slice(index - 1, index + 2);
+    const incoming = Math.hypot(...corner.map((value, axis) => value - before[axis]));
+    const outgoing = Math.hypot(...corner.map((value, axis) => value - after[axis]));
+    const radius = Math.min(3.8, incoming * .44, outgoing * .44);
+    path += `L${project(toward(corner, before, radius, incoming))}`;
+    path += `Q${project(corner)} ${project(toward(corner, after, radius, outgoing))}`;
+  }
+  return `${path}L${project(points.at(-1))}`;
+}
 function signal(name, group, points, kind = 'signal') {
-  const stops = points.map(at);
-  const wire = kind === 'logical' ? '' : k.wireSvg(stops[0],stops.at(-1),{via:stops.slice(1,-1),tone:'hi',size:2});
-  const path = k.pathOf(stops);
+  for (let index = 1; index < points.length; index++) {
+    if (points[index].filter((value, axis) => value !== points[index - 1][axis]).length !== 1) {
+      throw new Error(`${name}: every straight leg must follow exactly one world axis`);
+    }
+  }
+  const path = roundedRoute(points);
+  const terminals = [points[0], points.at(-1)].map(point => {
+    const [x,y] = at(point);
+    return `<circle class="iso-wire-end" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="1.85"/>`;
+  });
+  const wire = kind === 'logical' ? '' : k.groupSvg([k.lineSvg(path,{tone:'hi'}), ...terminals], { class:'iso-wire' });
   const ink = `<path class="rig-flow-track" d="${path}"/><path class="rig-flow-dash" d="${path}"/>`;
   trace.push(k.groupSvg(wire+ink,{'data-group':group,class:'rig-signal','data-wire':name,'data-kind':kind}));
 }
@@ -113,8 +135,8 @@ for (const [index,y] of [57,84].entries()) {
   mark(index === 0 ? 'D1 / 8833' : 'D2 / 8833',148,y+23,6.1);
   anchor(index === 0 ? 'd1' : 'd2',[162,y+8,4]);
 }
-signal('H1 PWM to D1','motor m1 m2',[[133,60,10],[141,60,10],[149,61,2]]);
-signal('H1 PWM to D2','motor m3',[[133,73,10],[140,77,10],[149,85,2]]);
+signal('H1 PWM to D1','motor m1 m2',[[133,60,10],[143,60,10],[143,60,2],[149,60,2]]);
+signal('H1 PWM to D2','motor m3',[[133,73,10],[141,73,10],[141,73,2],[141,85,2],[149,85,2]]);
 
 for (const [index,y] of [25,65,104].entries()) {
   const name = 'motor.'+(index+1), x = 198;
@@ -138,9 +160,9 @@ for (const [index,y] of [25,65,104].entries()) {
   mark('M'+(index+1),193,y+17,8);
   anchor(`m${index+1}`,[x,y,19.4]);
 }
-signal('D1 AO1/AO2 to M1','motor m1',[[176,60,2],[183,56,2],[186,32,2],[187,25,4]]);
-signal('D1 BO1/BO2 to M2','motor m2',[[176,66,2],[184,66,2],[187,65,4]]);
-signal('D2 AO1/AO2 to M3','motor m3',[[176,92,2],[182,94,2],[187,104,4]]);
+signal('D1 AO1/AO2 to M1','motor m1',[[176,60,2],[183,60,2],[183,25,2],[183,25,4],[187,25,4]]);
+signal('D1 BO1/BO2 to M2','motor m2',[[176,65,2],[183,65,2],[183,65,4],[187,65,4]]);
+signal('D2 AO1/AO2 to M3','motor m3',[[176,92,2],[182,92,2],[182,104,2],[182,104,4],[187,104,4]]);
 
 const power = 'motor drive m1 m2 m3';
 box('battery.cage',power,145,13,35,27,0,2,3);
@@ -150,9 +172,9 @@ stripe('battery.strap.1',power,151,15,3,23,8);
 stripe('battery.strap.2',power,172,15,3,23,8);
 mark('1S LIPO',146,10,7.4);
 anchor('battery',[164,26,8]);
-signal('battery lead',power,[[162,43,5],[162,47,5],[162,50,4]],'power');
-signal('1S to D1','motor m1 m2',[[162,50,4],[155,53,3],[149,57,2]],'power');
-signal('1S to D2','motor m3',[[162,50,4],[145,53,3],[145,80,2],[149,84,2]],'power');
+signal('battery lead',power,[[162,43,5],[162,50,5],[162,50,2]],'power');
+signal('1S to D1','motor m1 m2',[[162,50,2],[156,50,2],[156,57,2]],'power');
+signal('1S to D2','motor m3',[[162,50,2],[146,50,2],[146,84,2],[149,84,2]],'power');
 
 box('pca.board','tilt',66,110,36,17,0,2,1,'hi');
 box('pca.ic','tilt',80,115,11,7,2,2,1);
@@ -167,10 +189,10 @@ box('bmp.board','altitude',118,108,19,15,0,2,1,'hi');
 box('bmp.can','altitude',124,112,7,6,2,1.6,1,'hi');
 disk('bmp.vent','altitude',127,115,3.6,.8,.2);
 for (let i=0;i<4;i++) stripe('bmp.pin.'+i,'altitude',119+i*4,120,1.8,1.5,2);
-signal('I²C from H1','tilt altitude',[[133,76,6],[140,79,6],[140,103,2]]);
-signal('I²C to BMP581','altitude',[[140,103,2],[126,108,2]]);
-signal('I²C to PCA9685','tilt',[[140,103,2],[108,103,2],[100,110,2]]);
-signal('SG90 PWM','tilt',[[66,121,2],[61,119,2],[52,117,2]]);
+signal('I²C from H1','tilt altitude',[[133,76,6],[140,76,6],[140,76,2],[140,103,2]]);
+signal('I²C to BMP581','altitude',[[140,103,2],[126,103,2],[126,108,2]]);
+signal('I²C to PCA9685','tilt',[[140,103,2],[100,103,2],[100,110,2]]);
+signal('SG90 PWM','tilt',[[66,121,2],[59,121,2],[59,117,2],[52,117,2]]);
 mark('SG90',34,135,6.2);
 mark('PCA9685',67,135,6.3);
 mark('BMP581',118,132,6.8);
@@ -178,13 +200,13 @@ anchor('servo',[43,112,18]);
 anchor('pca',[85,118,4]);
 anchor('bmp',[127,115,4]);
 
-// These arrows trace data through the visible hardware, including links inside the host.
-signal('Mic to host','voice',[[118,86,17],[120,86,24],[118,51,28],[95,50,19]],'logical');
-signal('Host to speaker','voice sense',[[94,50,18],[72,49,27],[64,72,27],[76,85,18]],'logical');
-signal('IMU to host','sense',[[103,88,16],[109,87,25],[106,64,26],[94,50,18]],'logical');
-signal('Host to AMOLED','face sense',[[94,50,18],[93,56,27],[91,69,21]],'logical');
-signal('Lens to H2 ribbon','camera',[[36,61,14],[41,63,16],[48,67,10]],'logical');
-signal('H2 to host','camera',[[50,67,10],[55,65,10],[62,57,27],[94,50,18]],'logical');
+// On-board overlays show logical data flow along the board axes.
+signal('Mic to host','voice',[[118,86,17],[118,86,22],[118,50,22],[94,50,22],[94,50,18]],'logical');
+signal('Host to speaker','voice sense',[[94,50,18],[94,50,22],[75,50,22],[75,85,22],[75,85,18]],'logical');
+signal('IMU to host','sense',[[103,88,16],[103,88,22],[103,50,22],[94,50,22],[94,50,18]],'logical');
+signal('Host to AMOLED','face sense',[[94,50,18],[94,50,22],[94,69,22],[91,69,22],[91,69,21]],'logical');
+signal('Lens to H2 ribbon','camera',[[36,61,14],[42,61,14],[42,67,14],[42,67,10],[48,67,10]],'logical');
+signal('H2 to host','camera',[[50,67,10],[55,67,10],[55,67,22],[55,50,22],[94,50,22],[94,50,18]],'logical');
 
 a.settle(R,P);
 a.auditOrExit(R,P);

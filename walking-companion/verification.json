@@ -1,12 +1,13 @@
 {
-  "scope": "Metal poster theme with unchanged single-screen interactions",
+  "scope": "P1 landscape tablet experience",
   "checks": [
-    "Desktop home and split view visually inspected",
-    "390x844 mobile home and split view inspected with no page overflow",
-    "Eight expression controls",
-    "Mock device connection and scene-mode sync",
-    "Drawer open, close and inert focus state",
-    "Scene tabs remain below video"
+    "Edge at 1024x768 and 1234x678 with touch emulation",
+    "Five local MP4 demos, pause, resume and cleanup on scene changes",
+    "Rounded isometric dashes, camera push, hold and return, and reduced motion",
+    "Simulated Mosaico pairing, expression node focus, dialogue, three motor branches and developer entry",
+    "Anatomy geometry audit passed for 110 recorded solids in both themes",
+    "Python preview service tests passed for API and photo forwarding, origin checks, video ranges and WebSocket forwarding"
   ],
-  "media": "Concept images, video interfaces retained; no real hardware connection"
+  "media": "Five bundled concept videos and screenshots from Edge",
+  "physical_hotspot_test": "pending"
 }

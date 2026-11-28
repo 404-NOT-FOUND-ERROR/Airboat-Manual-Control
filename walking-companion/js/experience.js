@@ -1,5 +1,5 @@
 import {developerMode} from './developer.js';
-import {mountP1} from './p1.js?v=p1-flow';
+import {mountP1} from './p1.js?v=p1-rounded';
 import {manager, stopSceneVideo} from './main.js?v=p1-engraving';
 const $=s=>document.querySelector(s),drawer=$('#moments'),hero=$('.hero');
 window.companionDeveloper=developerMode;

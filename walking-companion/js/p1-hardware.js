@@ -152,7 +152,7 @@ export function mountHardware(parent) {
       paint(frame.overview, 'overview', frame.overview[2]);
       return;
     }
-    tour = { focus, from: camera ?? frame.overview, started: performance.now() };
+    tour = { focus, from: camera ?? frame.overview, started: performance.now(), settled: false };
     if (!camera) paint(frame.overview, 'overview', frame.overview[2]);
     motion = requestAnimationFrame(animate);
   }
@@ -166,7 +166,11 @@ export function mountHardware(parent) {
     const mix = (from, to, t) => from.map((value, index) => value + (to[index] - value) * t);
     const ease = t => t * t * (3 - 2 * t);
     if (elapsed < returnAt) {
-      paint(mix(tour.from, close, ease(Math.min(1, elapsed / riseMs))), elapsed < riseMs ? 'approach' : 'detail', overview[2]);
+      if (elapsed < riseMs) paint(mix(tour.from, close, ease(elapsed / riseMs)), 'approach', overview[2]);
+      else if (!tour.settled) {
+        paint(close, 'detail', overview[2]);
+        tour.settled = true;
+      }
     } else if (elapsed < returnAt + returnMs) {
       paint(mix(tour.focus ? close : tour.from, overview, ease(Math.max(0, (elapsed - returnAt) / returnMs))), 'return', overview[2]);
     } else {
@@ -215,7 +219,7 @@ export function mountHardware(parent) {
 
   async function load() {
     try {
-      const response = await fetch('assets/hardware/airboat-rig.svg?v=p1-flow');
+      const response = await fetch('assets/hardware/airboat-rig.svg?v=p1-rounded');
       if (!response.ok) throw new Error('Unable to load hardware drawing');
       const svg = new DOMParser().parseFromString(await response.text(), 'image/svg+xml').documentElement;
       if (svg.localName !== 'svg') throw new Error('Invalid hardware drawing');
@@ -223,17 +227,6 @@ export function mountHardware(parent) {
       board.replaceChildren(diagram);
       bounds = diagram.querySelector('.rig-world').getBBox();
       marks = [...diagram.querySelectorAll('[data-group]')].map(node => ({ node, groups: node.dataset.group.split(' ') }));
-      for (const path of diagram.querySelectorAll('.rig-flow-dash')) {
-        const distance = path.getTotalLength() * .7;
-        const point = path.getPointAtLength(distance);
-        const next = path.getPointAtLength(distance + 1);
-        const angle = Math.atan2(next.y - point.y, next.x - point.x) * 180 / Math.PI;
-        const arrow = document.createElementNS(svgNS, 'path');
-        arrow.setAttribute('class', 'rig-flow-arrow');
-        arrow.setAttribute('d', 'M-4 -3 L0 0 L-4 3');
-        arrow.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
-        path.after(arrow);
-      }
       projected = Object.fromEntries([...diagram.querySelectorAll('[data-anchor]')].map(node => [node.dataset.anchor, {
         x: Number(node.getAttribute('cx')), y: Number(node.getAttribute('cy')),
       }]));
@@ -247,9 +240,10 @@ export function mountHardware(parent) {
 
   new ResizeObserver(([entry]) => {
     ({ width, height } = entry.contentRect);
-    if (!width || !height || !diagram || tour) return;
+    if (!width || !height || !diagram) return;
     const frame = poses();
-    if (frame) paint(frame.overview, 'overview');
+    if (!tour) paint(frame.overview, 'overview');
+    else if (tour.settled && stage.dataset.camera === 'detail') paint(frame.close, 'detail', frame.overview[2]);
   }).observe(stage);
 
   reducedMotion.addEventListener('change', () => { if (diagram && reducedMotion.matches) moveCamera(false); });

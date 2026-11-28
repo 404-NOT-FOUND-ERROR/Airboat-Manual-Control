@@ -53,12 +53,11 @@
 .p1-board [data-group="bench"] { opacity: 1; }
 .p1-assembly .rig-selected { opacity: 1; filter: brightness(1.18); }
 .p1-assembly .rig-live { opacity: 1; filter: brightness(1.35) drop-shadow(0 0 3px #caee9175); }
-.p1-assembly .rig-flowing { --flow: #aaffcb; opacity: 1; filter: none; }
-.p1-assembly .rig-flowing[data-kind="power"] { --flow: #ffcc8b; }
+.p1-assembly .rig-flowing { --flow: #b5edb6; opacity: 1; filter: none; }
+.p1-assembly .rig-flowing[data-kind="power"] { --flow: #efc897; }
 .p1-assembly .rig-flowing .iso-line { opacity: 0; }
 .p1-assembly .rig-flowing .rig-flow-track,
-.p1-assembly .rig-flowing .rig-flow-dash,
-.p1-assembly .rig-flowing .rig-flow-arrow {
+.p1-assembly .rig-flowing .rig-flow-dash {
   display: inline;
   fill: none;
   stroke: var(--flow);
@@ -66,12 +65,10 @@
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-.rig-flow-arrow { display: none; }
-.rig-flowing .rig-flow-track { stroke-width: 4.5; opacity: .18; }
-.rig-flowing .rig-flow-dash { stroke-width: 2; stroke-dasharray: 5 6; animation: p1-signal-flow .55s linear infinite; }
-.rig-flowing .rig-flow-arrow { stroke-width: 1.65; }
+.rig-flowing .rig-flow-track { stroke-width: 3.2; opacity: .14; }
+.rig-flowing .rig-flow-dash { stroke-width: 1.65; stroke-dasharray: 4.5 5.5; animation: p1-signal-flow .62s linear infinite; }
 .p1-route-active .rig-signal:not(.rig-flowing) { opacity: .42; }
-@keyframes p1-signal-flow { to { stroke-dashoffset: -11; } }
+@keyframes p1-signal-flow { to { stroke-dashoffset: -10; } }
 .p1-part-detail { padding: 12px; }
 .p1-part-detail p { font-size: 13px; margin: 5px 0 0; }
 .p1-part-detail strong { font-size: 13px; }
